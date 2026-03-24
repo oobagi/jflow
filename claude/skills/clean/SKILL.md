@@ -62,7 +62,7 @@ List each stale worktree with its path, branch, and last commit date.
 ### Stale Branches (cleanup candidates)
 A branch is a cleanup candidate if ANY of these are true:
 - It is merged into the default branch (and is not the default branch itself)
-- Its remote tracking ref is nowne (remote branch was deleted)
+- Its remote tracking ref is gone (remote branch was deleted)
 - It has had no commits in 4+ weeks and is behind the default branch
 
 List each with name, last commit date, and reason it's stale.
