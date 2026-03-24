@@ -13,7 +13,7 @@ effort: high
 
 Run a health checkup on the current git repo and clean up stale artifacts.
 Run all independent information-gathering steps in parallel where possible.
-**Always confirm with the user before deleting anything.**
+**Unless `$ARGUMENTS` contains `--yes`, always confirm with the user before deleting anything.**
 
 
 ## Step 1: Gather repo state (run in parallel)
