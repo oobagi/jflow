@@ -44,8 +44,11 @@ Work strictly in a worktree (use `isolation: "worktree"` when spawning the imple
 
 ## 4. Hand off to user
 
-Once implementation is complete, tell the user:
+Once implementation is complete:
 
-1. What was done (brief summary)
-2. How to test it (specific commands to run)
-3. Prompt them to use `/test` to validate, then `/ship` when clean
+1. Enter the worktree using `EnterWorktree` so `/test` and `/ship` run in context
+2. Tell the user:
+   - What was done (brief summary)
+   - Which issue was implemented (e.g., "Working on #42")
+   - How to test it (specific commands to run)
+   - Prompt them to use `/test` to validate, then `/ship` when clean
