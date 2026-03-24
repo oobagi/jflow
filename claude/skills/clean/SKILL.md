@@ -49,7 +49,7 @@ Run these via Bash. If any fail, note it and skip gracefully.
 
 ## Step 2: Classify and report
 
-Present findings in these catenowries. Skip any section with nothing to report.
+Present findings in these categories. Skip any section with nothing to report.
 
 ### Stale Worktrees (cleanup candidates)
 A worktree is **stale** if ALL of these are true:
