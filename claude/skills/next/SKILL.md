@@ -1,8 +1,8 @@
 ---
 name: next
-description: Pick up the next roadmap item (or a specific issue), work in a worktree. Suggests parallel issues only when auto-picking.
+description: Pick up the next roadmap item (or a specific issue), work in a worktree. Use "parallel" to also suggest parallel issues.
 user_invocable: true
-argument-hint: [issue number | "go" to skip parallel suggestions and start immediately]
+argument-hint: [issue number | "parallel" to also suggest parallel issues]
 ---
 
 # Next
@@ -16,13 +16,9 @@ If `$ARGUMENTS` contains an issue number, use that and **skip straight to step 3
 - Read `ROADMAP.md` to find the next uncompleted item (first open issue in dependency order).
 - Run `gh issue view <number>` to get the full spec.
 
-## 2. Suggest parallel work (auto-pick only)
+## 2. Suggest parallel work (only when explicitly requested)
 
-**Skip this entire step if any of these are true:**
-- An issue number was provided in `$ARGUMENTS`
-- `$ARGUMENTS` contains "go" (e.g., `/next go`) — proceed directly to implementation
-
-Only run when auto-picking from the roadmap with no flags:
+**Skip this entire step unless `$ARGUMENTS` contains "parallel"** (e.g., `/next parallel`).
 
 List a few open issues that are **NOT in the roadmap** — these are standalone bugs, CLI improvements, or features the user can hand off to other agents in separate worktrees. To find them:
 
