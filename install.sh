@@ -3,22 +3,26 @@ set -e
 
 DOTFILES_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-link() {
-  local src="$1" dst="$2"
-  mkdir -p "$(dirname "$dst")"
-  if [ -L "$dst" ]; then
-    rm "$dst"
-  elif [ -e "$dst" ]; then
-    echo "  backing up $dst -> $dst.bak"
-    mv "$dst" "$dst.bak"
-  fi
-  ln -s "$src" "$dst"
-  echo "  $dst -> $src"
-}
+mkdir -p "$HOME/.claude"
 
-echo "Linking Claude Code configs..."
-for item in skills agents hooks CLAUDE.md RTK.md settings.json; do
-  link "$DOTFILES_DIR/claude/$item" "$HOME/.claude/$item"
+echo "Installing Claude Code configs..."
+
+# Copy directories (merge into existing, overwrite matching files)
+for dir in skills agents; do
+  if [ -d "$DOTFILES_DIR/claude/$dir" ]; then
+    cp -R "$DOTFILES_DIR/claude/$dir" "$HOME/.claude/"
+    echo "  copied $dir/"
+  fi
 done
+
+# Copy settings.json (back up existing if it differs)
+if [ -f "$HOME/.claude/settings.json" ]; then
+  if ! diff -q "$DOTFILES_DIR/claude/settings.json" "$HOME/.claude/settings.json" > /dev/null 2>&1; then
+    echo "  backing up settings.json -> settings.json.bak"
+    cp "$HOME/.claude/settings.json" "$HOME/.claude/settings.json.bak"
+  fi
+fi
+cp "$DOTFILES_DIR/claude/settings.json" "$HOME/.claude/settings.json"
+echo "  copied settings.json"
 
 echo "Done!"
