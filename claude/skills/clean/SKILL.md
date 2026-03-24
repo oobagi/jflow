@@ -5,6 +5,7 @@ description: >
   worktrees/branches that are behind main and not actively worked on. Also prunes remotes,
   cleans up merged branches, and checks for other repo hygiene issues.
 user-invocable: true
+argument-hint: ["go" to skip confirmation and clean immediately]
 allowed-tools: Bash, Read, Glob, Grep, Agent
 effort: high
 ---
