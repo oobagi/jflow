@@ -81,9 +81,7 @@ Branches with recent unmerged work. Briefly list them.
 
 ## Step 3: Confirm and clean
 
-**If `--dry-run` was passed, STOP here.** Report what would be done and exit.
-
-Otherwise, present a summary of proposed actions:
+Present a summary of proposed actions:
 
 1. **Remove stale worktrees** — `git worktree remove <path>` for each
 2. **Delete stale local branches** — `git branch -d <branch>` for each
