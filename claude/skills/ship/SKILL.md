@@ -46,11 +46,14 @@ EOF
 
 Push the branch with `git push -u origin <branch>`.
 
-Create a PR with `gh pr create`. The PR body should include:
+Create a PR with `gh pr create`.
+
+The PR title should include `(Closes #N)` when implementing or fixing an issue — e.g., `feat: add WASD controls (Closes #42)`. This auto-closes the issue on merge.
+
+The PR body should include:
 
 - `## Summary` with bullet points of what changed
 - `## Test plan` with a checklist of how it was verified
-- `Closes #N` if fixing an issue (for auto-close)
 - Footer: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
 
 ## 5. Merge and cleanup
