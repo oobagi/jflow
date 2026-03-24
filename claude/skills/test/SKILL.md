@@ -47,6 +47,20 @@ Collect results from both agents and present a unified summary:
 - **Suggestions** — should fix, but not blocking
 - **Verdict** — ready to ship or needs work
 
-If there are blockers, fix them. Then tell the user to run `/test` again or `/ship` if clean.
+## 5. Fix blockers
 
-If no blockers, tell the user to `/ship` when ready.
+If there are blockers, spawn a Software Architect agent (`subagent_type: "Software Architect"`) to implement the fixes. Pass it:
+
+- The full list of blockers and suggestions from both reviewers
+- The relevant file paths and what needs to change
+- Instructions to fix each issue while preserving existing behavior
+
+After the agent completes, re-run lint and tests to verify the fixes don't introduce regressions.
+
+If no blockers, skip to step 6.
+
+## 6. Final verdict
+
+If fixes were applied in step 5, tell the user to run `/test` again to re-validate.
+
+If no blockers were found (or only suggestions remain), tell the user to `/ship` when ready.
