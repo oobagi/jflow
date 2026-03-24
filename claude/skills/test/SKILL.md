@@ -49,13 +49,15 @@ Collect results from both agents and present a unified summary:
 
 ## 5. Fix blockers
 
-If there are blockers, spawn a Software Architect agent (`subagent_type: "Software Architect"`) to implement the fixes. Pass it:
+If there are blockers, spawn the most appropriate agent(s) to implement the fixes. Choose based on the nature of the issues — e.g., a Software Architect for design/structural problems, a Code Reviewer for correctness issues, or a general-purpose agent for straightforward bug fixes. Use multiple agents in parallel if the blockers span different domains.
+
+Pass the chosen agent(s):
 
 - The full list of blockers and suggestions from both reviewers
 - The relevant file paths and what needs to change
 - Instructions to fix each issue while preserving existing behavior
 
-After the agent completes, re-run lint and tests to verify the fixes don't introduce regressions.
+After the agent(s) complete, re-run lint and tests to verify the fixes don't introduce regressions.
 
 If no blockers, skip to step 6.
 
