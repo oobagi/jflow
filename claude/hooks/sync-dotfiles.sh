@@ -6,7 +6,7 @@
 # skills/ or agents/, and if so copies it to the dotfiles repo and
 # auto-commits + pushes.
 
-DOTFILES_REPO="$HOME/Developer/dotfiles"
+DOTFILES_REPO="${DOTFILES_REPO:-$HOME/dotfiles}"
 CLAUDE_DIR="$HOME/.claude"
 
 # Read hook input (JSON on stdin)
