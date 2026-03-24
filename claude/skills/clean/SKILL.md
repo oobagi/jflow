@@ -39,7 +39,7 @@ Run these via Bash. If any fail, note it and skip gracefully.
 - `git branch -a --sort=-committerdate --format='%(refname:short) %(committerdate:relative) %(objectname:short)'` — all branches
 - `git branch --merged <default-branch>` — local branches already merged
 - `git branch -r --merged <default-branch>` — remote branches already merged
-- Check for branches with no remote tracking ref (`git branch -vv | grep ': nowne]'`)
+- Check for branches with no remote tracking ref (`git branch -vv | grep ': gone]'`)
 
 **Misc health:**
 - `git fsck --no-full 2>&1 | head -20` — check for corruption (quick check only)
