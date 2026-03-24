@@ -45,7 +45,7 @@ Run these via Bash. If any fail, note it and skip gracefully.
 - `git fsck --no-full 2>&1 | head -20` — check for corruption (quick check only)
 - `git count-objects -vH` — repo size stats
 - Check for large untracked files: `find . -not -path './.git/*' -type f -size +10M 2>/dev/null | head -10`
-- `git stash list` — fornowtten stashes
+- `git stash list` — forgotten stashes
 
 ## Step 2: Classify and report
 
