@@ -42,10 +42,10 @@ Work strictly in a worktree (use `isolation: "worktree"` when spawning the imple
 - Run any relevant tests
 - Report back with a summary of changes
 
-## 5. Hand off to user
+## 4. Hand off to user
 
 Once implementation is complete, tell the user:
 
 1. What was done (brief summary)
 2. How to test it (specific commands to run)
-3. Prompt them to use `/ship` when satisfied
+3. Prompt them to use `/test` to validate, then `/ship` when clean
