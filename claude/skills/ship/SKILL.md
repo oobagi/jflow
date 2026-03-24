@@ -60,6 +60,8 @@ The PR body should include:
 
 Merge the PR with `gh pr merge <number> --merge`.
 
+If in a worktree, use `ExitWorktree` to return to the main working directory.
+
 Then clean up:
 
 ```
