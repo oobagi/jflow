@@ -18,7 +18,7 @@ Run `git status` and `git diff --stat` to see what changed. Review the changes t
 
 ## 3. Create branch and commit
 
-Create a descriptive branch from the main branch (e.g., `fix/play-pause-ui-state`, `feat/wasd-controls`).
+If already on a feature branch (not `main` or `master`), skip branch creation. Otherwise, create a descriptive branch from the main branch (e.g., `fix/play-pause-ui-state`, `feat/wasd-controls`).
 
 Stage all relevant files (do NOT use `git add -A` — be selective, avoid committing .env, .db files, or other artifacts).
 
