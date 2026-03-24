@@ -32,7 +32,7 @@ Tell it to review all uncommitted changes. It should:
 ### Reality Checker (`subagent_type: "Reality Checker"`)
 
 Tell it to evaluate the implementation against the issue spec or design docs. It should:
-- Read the relevant issue (check recent git log for issue numbers) and any design docs
+- Read the relevant issue (check conversation context or recent git log for issue numbers) and any design docs
 - Read the changed files
 - Assess: does the implementation match the spec? Any gaps?
 - Give an honest verdict — do NOT make changes
