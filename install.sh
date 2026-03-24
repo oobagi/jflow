@@ -8,12 +8,17 @@ mkdir -p "$HOME/.claude"
 echo "Installing Claude Code configs..."
 
 # Copy directories (merge into existing, overwrite matching files)
-for dir in skills agents; do
+for dir in skills agents hooks; do
   if [ -d "$DOTFILES_DIR/claude/$dir" ]; then
     cp -R "$DOTFILES_DIR/claude/$dir" "$HOME/.claude/"
     echo "  copied $dir/"
   fi
 done
+
+# Make hooks executable
+if [ -d "$HOME/.claude/hooks" ]; then
+  chmod +x "$HOME/.claude/hooks"/*.sh 2>/dev/null || true
+fi
 
 # Copy settings.json (back up existing if it differs)
 if [ -f "$HOME/.claude/settings.json" ]; then
