@@ -2,7 +2,7 @@
 name: next
 description: Pick up the next roadmap item (or a specific issue), work in a worktree. Suggests parallel issues only when auto-picking.
 user_invocable: true
-argument-hint: [optional issue number to work on instead of auto-picking]
+argument-hint: [issue number | "go" to skip parallel suggestions and start immediately]
 ---
 
 # Next
@@ -18,7 +18,11 @@ If `$ARGUMENTS` contains an issue number, use that and **skip straight to step 3
 
 ## 2. Suggest parallel work (auto-pick only)
 
-**Skip this step if an issue number was provided.** Only run when auto-picking from the roadmap.
+**Skip this entire step if any of these are true:**
+- An issue number was provided in `$ARGUMENTS`
+- `$ARGUMENTS` contains "go" (e.g., `/next go`) — proceed directly to implementation
+
+Only run when auto-picking from the roadmap with no flags:
 
 List a few open issues that are **NOT in the roadmap** — these are standalone bugs, CLI improvements, or features the user can hand off to other agents in separate worktrees. To find them:
 
