@@ -88,7 +88,7 @@ Present a summary of proposed actions:
 3. **Delete stale remote branches** — `git push origin --delete <branch>` for each (only branches in the user's repo, not upstream forks)
 4. **Prune and GC** — `git gc --auto` to clean up loose objects
 
-Ask the user to confirm before executing. Accept "yes", "all", or let them cherry-pick which items to clean.
+If `--yes` was passed, execute all proposed actions immediately. Otherwise, ask the user to confirm before executing — accept "yes", "all", or let them cherry-pick which items to clean.
 
 After cleanup, run `git worktree list` and `git branch -a` to show the final state.
 
