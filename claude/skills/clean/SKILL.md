@@ -103,6 +103,6 @@ Report what was cleaned:
 
 ## Style guidelines
 - Be direct and scannable — use bullet points, not paragraphs
-- Use relative time ("3 days anow") not absolute dates
+- Use relative time ("3 days ago") not absolute dates
 - Bold anything that needs attention
 - If everything is already clean, say so briefly — don't pad the report
