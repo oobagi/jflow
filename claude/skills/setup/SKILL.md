@@ -518,12 +518,16 @@ After everything is created, show the user:
   - CI workflow (what it runs)
   - Roadmap sync (auto-checkbox updates)
   - Branch protection (enabled or skipped)
-- **ROADMAP_PAT reminder**: The roadmap-sync workflow requires a `ROADMAP_PAT` repository secret — a GitHub Personal Access Token with `repo` scope. Tell the user:
+- **ROADMAP_PAT setup**: The roadmap-sync workflow requires a `ROADMAP_PAT` repository secret — a GitHub Personal Access Token with `repo` scope. Tell the user:
 
-  > **Action needed:** Create a `ROADMAP_PAT` repository secret for roadmap auto-sync.
+  > **Action needed:** Create a `ROADMAP_PAT` secret for roadmap auto-sync.
   >
   > 1. Go to https://github.com/settings/tokens and create a fine-grained token with **Contents** and **Pull requests** read+write access for this repo
-  > 2. Go to the repo's **Settings > Secrets and variables > Actions** and add it as `ROADMAP_PAT`
+  > 2. Set it from the terminal:
+  >    ```
+  >    echo "<your-token>" | gh secret set ROADMAP_PAT --repo <user>/<repo>
+  >    ```
+  >    Or add it manually at the repo's **Settings > Secrets and variables > Actions**.
   >
   > Without this, the roadmap-sync workflow won't be able to create PRs or push changes.
 
