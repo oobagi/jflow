@@ -58,7 +58,14 @@ The PR body should include:
 
 ## 5. Merge and cleanup
 
-Merge the PR with `gh pr merge <number> --merge`.
+Try to merge the PR with `gh pr merge <number> --merge`.
+
+If branch protection blocks the merge, queue auto-merge with `gh pr merge <number> --auto --merge`, then wait for CI:
+
+1. Poll with `gh pr view <number> --json state,statusCheckRollup` every 15 seconds (max 5 minutes).
+2. If all checks pass and the PR merges, continue to cleanup.
+3. If checks fail, report the failure and stop — do not retry or bypass.
+4. If 5 minutes elapse without resolution, report the current status and stop.
 
 If in a worktree, use `ExitWorktree` to return to the main working directory.
 
