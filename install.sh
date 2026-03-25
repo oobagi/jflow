@@ -6,6 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 JSTACK_DIR="${JSTACK_DIR:-$HOME/.jstack}"
+# Expand $HOME if passed as a literal string (e.g., from settings.json env vars)
+JSTACK_DIR="${JSTACK_DIR/\$HOME/$HOME}"
 CLAUDE_DIR="$HOME/.claude"
 VERSION=$(cat "$SCRIPT_DIR/VERSION")
 
