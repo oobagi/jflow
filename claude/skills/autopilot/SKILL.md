@@ -49,7 +49,7 @@ Count total items to work through and report:
 
 > **Autopilot engaged.** N items remaining across M phases.
 > Starting with: #X — Title
-> Mode: [yolo | interactive]
+> Mode: [autopilot | interactive]
 
 ## 2. Create progress tracker
 
