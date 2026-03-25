@@ -15,11 +15,13 @@ VERSION=$(cat "$SCRIPT_DIR/VERSION")
 UNINSTALL=false
 DRY_RUN=false
 NO_SETTINGS=false
+NO_RTK=false
 for arg in "$@"; do
   case "$arg" in
     --uninstall)   UNINSTALL=true ;;
     --dry-run)     DRY_RUN=true ;;
     --no-settings) NO_SETTINGS=true ;;
+    --no-rtk)      NO_RTK=true ;;
     --help|-h)
       echo "jstack v$VERSION — Claude Code skill/agent stack"
       echo ""
@@ -29,6 +31,7 @@ for arg in "$@"; do
       echo "  --uninstall     Remove jstack symlinks, hooks, and settings entries"
       echo "  --dry-run       Show what would happen without making changes"
       echo "  --no-settings   Skip settings.json merge"
+      echo "  --no-rtk        Skip rtk installation"
       echo "  --help          Show this help"
       exit 0
       ;;
@@ -221,6 +224,43 @@ merge_settings() {
   info "Merged settings (jstack v$VERSION)"
 }
 
+# --- Install rtk ---
+install_rtk() {
+  if $NO_RTK; then
+    info "Skipping rtk installation (--no-rtk)"
+    return
+  fi
+
+  if command -v rtk &>/dev/null; then
+    info "rtk already installed ($(rtk --version 2>/dev/null || echo 'unknown version'))"
+    return
+  fi
+
+  if ! command -v curl &>/dev/null; then
+    warn "curl not found — skipping rtk install. Install manually: https://github.com/rtk-ai/rtk"
+    return
+  fi
+
+  info "Installing rtk (token-compression proxy for Claude Code)..."
+
+  if $DRY_RUN; then
+    echo "  [dry-run] Would install rtk via curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh"
+    return
+  fi
+
+  if curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh 2>&1 | sed 's/^/    /'; then
+    # Ensure ~/.local/bin is in PATH for this session
+    export PATH="$HOME/.local/bin:$PATH"
+    if command -v rtk &>/dev/null; then
+      info "rtk installed successfully ($(rtk --version 2>/dev/null || echo 'unknown version'))"
+    else
+      warn "rtk installed to ~/.local/bin — add to PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+  else
+    warn "rtk install failed — install manually: https://github.com/rtk-ai/rtk"
+  fi
+}
+
 # --- Uninstall ---
 uninstall() {
   echo "Uninstalling jstack..."
@@ -285,6 +325,7 @@ main() {
   install_agents
   install_hooks
   merge_settings
+  install_rtk
 
   echo ""
   echo "jstack v$VERSION installed successfully!"
@@ -292,6 +333,7 @@ main() {
   echo "  Skills:   $(ls -1d "$JSTACK_DIR"/skills/*/ 2>/dev/null | wc -l | tr -d ' ') skills linked"
   echo "  Agents:   $(ls -1 "$JSTACK_DIR"/agents/*.md 2>/dev/null | wc -l | tr -d ' ') agents linked"
   echo "  Hooks:    rtk-rewrite.sh"
+  echo "  rtk:      $(command -v rtk &>/dev/null && rtk --version 2>/dev/null || echo 'not in PATH — add ~/.local/bin')"
   echo "  Settings: merged into ~/.claude/settings.json"
   echo ""
   echo "  Install location: $JSTACK_DIR"
