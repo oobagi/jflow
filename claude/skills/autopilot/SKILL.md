@@ -3,7 +3,7 @@ name: autopilot
 description: >
   Fully automated development loop — iterates through ROADMAP.md items one at a time,
   running /next → /test → /ship for each. Runs /checkup at phase boundaries.
-  Use "yolo" to skip confirmations. Use "phase-N" to start at a specific phase.
+  Use "interactive" to confirm before each item. Use "phase-N" to start at a specific phase.
 user_invocable: true
 argument-hint: >
   ["interactive" to confirm before each item | "phase-N" to start at phase N | both: "interactive phase-2"]
