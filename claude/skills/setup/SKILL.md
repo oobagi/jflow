@@ -2,8 +2,10 @@
 name: setup
 description: >
   Scaffold a new project — creates a local directory, initializes a GitHub repo,
-  and generates README, ROADMAP, AGENTS.md, LICENSE, docs/, and optional
-  language-specific scaffolding. Private repo by default.
+  and generates README, ROADMAP, AGENTS.md, LICENSE, docs/, CI/CD workflows,
+  and optional language-specific scaffolding. Sets up GitHub issues for every
+  roadmap item, auto-syncing roadmap checkboxes, branch protection, and
+  auto-merge. Private repo by default.
 user-invocable: true
 argument-hint: "[project description or context — leave blank for guided setup]"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion
@@ -11,7 +13,7 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion
 
 # Setup
 
-Scaffold a new project from scratch. Gather requirements conversationally, then create everything in one shot.
+Scaffold a new project from scratch. Gather requirements conversationally, then create everything in one shot — including full CI/CD automation.
 
 ## 1. Gather project info
 
@@ -103,22 +105,27 @@ Adapt sections to what makes sense for the project. Don't force sections that ha
 
 For the image reference in the header, always include it pointed at `assets/<project-name>-icon.png` — the file won't exist yet, but it gives the user a clear place to drop an icon later.
 
-### ROADMAP.md
+### ROADMAP.md (draft — issue links added in step 5)
 
-If the user provided goals, features, or a project vision, create a real roadmap with phases/milestones. Use GitHub issue references where it makes sense (the issues won't exist yet — that's fine, they'll be created later).
-
-If the user gave minimal context, create a simple roadmap with:
+Generate the roadmap with phases/milestones based on the user's goals. Use this format for each item — **without issue links for now** (they get added after issues are created in step 5):
 
 ```markdown
 # Roadmap
 
+This roadmap orders open work by leverage and dependency. Each item links to a GitHub issue with full details. Checkboxes are updated automatically when issues are closed or reopened.
+
 ## Phase 1: Foundation
+
 - [ ] Project scaffolding and CI setup
 - [ ] Core architecture
 - [ ] ...
+
+## Phase 2: ...
+
+- [ ] ...
 ```
 
-Seed it with whatever is reasonable based on what you know about the project.
+Keep items concrete and actionable — each one should be a meaningful unit of work that maps well to a single GitHub issue. Avoid vague items like "improve performance" — instead, specify what gets improved.
 
 ### LICENSE
 
@@ -152,6 +159,233 @@ Create `assets/` directory (this is where the README header image will go):
 
 ```bash
 mkdir -p assets
+```
+
+### .github/workflows/ci.yml
+
+Generate a CI workflow appropriate for the tech stack. Trigger on push to `main` and pull requests to `main`. Include lint, test, and build steps.
+
+**Templates by stack:**
+
+**Python:**
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[dev]'
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Test
+        run: pytest -q
+
+      - name: Build
+        run: python -m build
+```
+
+**Rust:**
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Check formatting
+        run: cargo fmt --check
+
+      - name: Lint
+        run: cargo clippy -- -D warnings
+
+      - name: Test
+        run: cargo test
+
+      - name: Build
+        run: cargo build --release
+```
+
+**Node/TypeScript:**
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+```
+
+**Swift:**
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: swift build
+
+      - name: Test
+        run: swift test
+```
+
+**Go:**
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v4
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        run: go build ./...
+```
+
+Adapt the template to match the project's actual setup (e.g., if pyproject.toml has specific extras, use them in the install step). If the stack doesn't match any template, create a reasonable CI workflow based on the stack's conventions.
+
+### .github/workflows/roadmap-sync.yml
+
+Generate the roadmap auto-sync workflow. This is stack-independent — it's the same for every project:
+
+```yaml
+name: Sync Roadmap Checkboxes
+
+on:
+  issues:
+    types: [closed, reopened]
+
+jobs:
+  update-roadmap:
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_STATE: ${{ github.event.action }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ROADMAP_PAT }}
+
+      - name: Update ROADMAP.md checkbox
+        run: |
+          if [ "$ISSUE_STATE" = "closed" ]; then
+            sed -i "s/^- \[ \] \[#${ISSUE_NUMBER} /- [x] [#${ISSUE_NUMBER} /" ROADMAP.md
+          else
+            sed -i "s/^- \[x\] \[#${ISSUE_NUMBER} /- [ ] [#${ISSUE_NUMBER} /" ROADMAP.md
+          fi
+
+      - name: Commit and push
+        env:
+          GH_TOKEN: ${{ secrets.ROADMAP_PAT }}
+        run: |
+          git diff --quiet ROADMAP.md && exit 0
+          BRANCH="roadmap/mark-${ISSUE_NUMBER}-${ISSUE_STATE}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add ROADMAP.md
+          git commit -m "roadmap: mark #${ISSUE_NUMBER} as ${ISSUE_STATE}"
+          git push origin "$BRANCH"
+          PR_URL=$(gh pr create \
+            --title "roadmap: mark #${ISSUE_NUMBER} as ${ISSUE_STATE}" \
+            --body "Auto-generated: update ROADMAP.md checkbox for #${ISSUE_NUMBER}." \
+            --head "$BRANCH" \
+            --base main)
+          gh pr merge "$PR_URL" --auto --merge --delete-branch
 ```
 
 ### Language-specific scaffolding
@@ -188,7 +422,7 @@ git add -A
 git commit -m "$(cat <<'EOF'
 Initial project scaffolding
 
-Generated with /setup — includes README, ROADMAP, AGENTS.md, LICENSE, docs/, and project skeleton.
+Generated with /setup — includes README, ROADMAP, AGENTS.md, LICENSE, CI/CD, docs/, and project skeleton.
 
 Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 EOF
@@ -197,10 +431,100 @@ EOF
 
 Then create the repo and push.
 
-## 5. Summary
+## 5. Set up automation
+
+After the repo exists on GitHub, set up the full automation pipeline.
+
+### 5a. Create GitHub issues for every roadmap item
+
+For each item in ROADMAP.md, create a GitHub issue using `gh issue create`. The issue title should match the roadmap item text. Add a brief body describing the task. Assign a label matching the roadmap phase (create labels first if needed).
+
+```bash
+# Example: create an issue and capture its number
+ISSUE_NUM=$(gh issue create \
+  --title "Core architecture" \
+  --body "Set up the core architecture for the project." \
+  --label "phase-1" \
+  | grep -o '[0-9]*$')
+```
+
+Create all issues and capture their numbers.
+
+### 5b. Rewrite ROADMAP.md with issue links
+
+Once all issues are created, rewrite ROADMAP.md so every item links to its GitHub issue. Use the same format as the user's established projects:
+
+```markdown
+- [ ] [#1 Project scaffolding and CI setup](https://github.com/<user>/<repo>/issues/1)
+- [ ] [#2 Core architecture](https://github.com/<user>/<repo>/issues/2)
+```
+
+This format is what the `roadmap-sync.yml` workflow matches against with its `sed` pattern. The format must be exact: `- [ ] [#N Title](URL)`.
+
+### 5c. Set up branch protection
+
+Enable branch protection on `main` to require PRs and status checks:
+
+```bash
+# Enable auto-merge on the repo
+gh api repos/<user>/<repo> \
+  -X PATCH \
+  -f allow_auto_merge=true
+
+# Create branch protection rule
+gh api repos/<user>/<repo>/branches/main/protection \
+  -X PUT \
+  --input - <<'EOF'
+{
+  "required_status_checks": {
+    "strict": true,
+    "contexts": ["test"]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+EOF
+```
+
+Adapt the `contexts` array to match the actual job name(s) in `ci.yml`. If the CI uses a matrix, use the job name (e.g., `"test"` — GitHub Actions expands matrix jobs under the job name).
+
+**Note:** Branch protection requires the repo to be on a GitHub plan that supports it (Pro, Team, or Enterprise for private repos; free for public repos). If the API call fails because of plan limitations, warn the user and skip — don't block the rest of setup.
+
+### 5d. Commit and push automation updates
+
+```bash
+git add ROADMAP.md
+git commit -m "$(cat <<'EOF'
+Link roadmap items to GitHub issues
+
+Each ROADMAP.md checkbox now links to a tracked GitHub issue.
+Roadmap checkboxes auto-update when issues are closed or reopened.
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+EOF
+)"
+git push
+```
+
+## 6. Summary
 
 After everything is created, show the user:
 
 - The repo URL (`gh repo view --json url --jq .url`)
-- A tree view of what was created (`find . -not -path './.git/*' -not -name '.git' | head -30 | sort`)
-- Any next steps (e.g., "Drop an icon at `assets/<project-name>-icon.png`", "Run `/next` to start working through the roadmap")
+- A tree view of what was created (`find . -not -path './.git/*' -not -name '.git' | head -40 | sort`)
+- Automation status:
+  - Number of GitHub issues created
+  - CI workflow (what it runs)
+  - Roadmap sync (auto-checkbox updates)
+  - Branch protection (enabled or skipped)
+- **ROADMAP_PAT reminder**: The roadmap-sync workflow requires a `ROADMAP_PAT` repository secret — a GitHub Personal Access Token with `repo` scope. Tell the user:
+
+  > **Action needed:** Create a `ROADMAP_PAT` repository secret for roadmap auto-sync.
+  >
+  > 1. Go to https://github.com/settings/tokens and create a fine-grained token with **Contents** and **Pull requests** read+write access for this repo
+  > 2. Go to the repo's **Settings > Secrets and variables > Actions** and add it as `ROADMAP_PAT`
+  >
+  > Without this, the roadmap-sync workflow won't be able to create PRs or push changes.
+
+- Next steps (e.g., "Drop an icon at `assets/<project-name>-icon.png`", "Run `/next` to start working through the roadmap")
