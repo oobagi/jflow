@@ -59,9 +59,9 @@ Use `TaskCreate` to create a parent task for the full autopilot run, then child 
 
 For each uncompleted roadmap item, in order:
 
-### 3a. Gate check (unless yolo)
+### 3a. Gate check (interactive mode only)
 
-If NOT in yolo mode, ask the user:
+If in interactive mode, ask the user:
 
 > **Next up:** #N — Title (Phase X)
 > Continue? [yes / skip / stop]
@@ -70,7 +70,7 @@ If NOT in yolo mode, ask the user:
 - **skip** — skip this item, move to the next
 - **stop** — end the autopilot run, print summary
 
-If in yolo mode, skip this prompt entirely.
+In default (autopilot) mode, skip this prompt entirely.
 
 ### 3b. Run `/next <issue-number>`
 
