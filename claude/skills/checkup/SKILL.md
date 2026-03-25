@@ -77,7 +77,7 @@ Branches with recent unmerged work. Briefly list them.
 - Disk usage (from `count-objects`)
 - Any fsck warnings
 - Large untracked files
-- Fornowtten stashes (suggest `git stash drop` if old)
+- Forgotten stashes (suggest `git stash drop` if old)
 - Dangling objects or other issues
 
 ## Step 3: Confirm and clean
