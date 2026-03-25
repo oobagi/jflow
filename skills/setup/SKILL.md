@@ -437,14 +437,75 @@ After the repo exists on GitHub, set up the full automation pipeline.
 
 ### 5a. Create GitHub issues for every roadmap item
 
-For each item in ROADMAP.md, create a GitHub issue using `gh issue create`. The issue title should match the roadmap item text. Add a brief body describing the task. Assign a label matching the roadmap phase (create labels first if needed).
+For each item in ROADMAP.md, create a GitHub issue using `gh issue create`. The issue title should match the roadmap item text. Assign a label matching the roadmap phase (create labels first if needed).
+
+**Each issue must be a proper spec, not a one-liner.** Write the issue body as a structured document that someone could implement without asking clarifying questions. Use this format:
+
+```markdown
+## Context
+
+Why this work matters — what problem it solves, what depends on it, or what user need it addresses. 2-3 sentences grounding the reader.
+
+## Proposed approach
+
+Concrete steps, commands, APIs, data models, or architectural decisions relevant to implementing this item. Be specific — name files, functions, endpoints, schemas where applicable. If there are multiple valid approaches, briefly note the recommended one and why.
+
+## Tasks
+
+- [ ] First concrete subtask
+- [ ] Second concrete subtask
+- [ ] Write tests for X
+- [ ] Update docs if needed
+
+## Acceptance criteria
+
+- [ ] Specific condition that must be true when this is done
+- [ ] Another measurable outcome
+- [ ] Tests pass, lint clean
+
+## References
+
+- Related issues: #N, #M
+- Relevant docs: `docs/foo.md`, external links
+- Design decisions: any ADRs or notes from the architecture review
+```
+
+Adapt the template to each item — a small bug fix needs less structure than a core architecture decision. But every issue should have at minimum: **Context** (why), **Tasks** (what to do), and **Acceptance criteria** (how to verify). The goal is issues detailed enough to hand to `/next` for autonomous implementation.
 
 ```bash
-# Example: create an issue and capture its number
+# Example: create an issue with a proper body and capture its number
 ISSUE_NUM=$(gh issue create \
   --title "Core architecture" \
-  --body "Set up the core architecture for the project." \
   --label "phase-1" \
+  --body "$(cat <<'ISSUE_EOF'
+## Context
+
+The project needs a foundational architecture before feature work can begin.
+This establishes the module structure, error handling patterns, and data flow
+that all subsequent issues build on.
+
+## Proposed approach
+
+- Set up the directory structure: `src/`, `tests/`, `config/`
+- Define the core types and traits/interfaces
+- Establish error handling pattern (Result types, custom errors)
+- Add a basic CLI entry point or server skeleton
+
+## Tasks
+
+- [ ] Create module/package structure
+- [ ] Define core types
+- [ ] Set up error handling
+- [ ] Add entry point with basic arg parsing
+- [ ] Verify `cargo build` / `npm run build` succeeds
+
+## Acceptance criteria
+
+- [ ] Project builds with zero warnings
+- [ ] Module structure matches AGENTS.md description
+- [ ] CI passes on this foundation
+ISSUE_EOF
+)" \
   | grep -o '[0-9]*$')
 ```
 
@@ -507,7 +568,57 @@ EOF
 git push
 ```
 
-## 6. Summary
+## 6. Architecture review
+
+Before declaring setup complete, validate the scaffolded project with review agents. This catches structural issues before `/autopilot` starts building on a weak foundation.
+
+### 6a. Run review agents in parallel
+
+Launch these agents **in parallel** (single message, multiple Agent tool calls):
+
+**Software Architect** (`subagent_type: "Software Architect"`):
+- Review `ROADMAP.md`: Are phases ordered by dependency? Are items concrete enough to implement? Any missing foundational work?
+- Review project structure: Does the directory layout match the tech stack's conventions? Any missing standard directories?
+- Review `ci.yml`: Does it test what matters? Any missing steps for the stack?
+- Produce a brief assessment with: approved items, suggested changes, and questions
+
+**Code Reviewer** (`subagent_type: "Code Reviewer"`):
+- Review all generated code files (not docs): `Cargo.toml`, `package.json`, `pyproject.toml`, CI workflow YAML, `.gitignore`, language scaffolding
+- Flag blockers (incorrect configurations that would cause build/CI failures) and suggestions (improvements)
+
+### 6b. Present findings
+
+Show the combined results from both agents grouped by severity:
+
+1. **Blockers** — must fix now (incorrect configs, missing dependencies, CI that won't pass)
+2. **Suggestions** — recommended changes (roadmap reordering, missing scaffolding, convention mismatches)
+3. **Questions** — ambiguities that should be resolved before building
+
+### 6c. Apply fixes
+
+If there are blockers or the user approves suggestions:
+- Apply the changes directly (edit ROADMAP.md, adjust scaffolding, fix CI)
+- If fixes change the roadmap structure or issue descriptions, update the corresponding GitHub issues too
+- Commit and push:
+
+```bash
+git add -A
+git commit -m "$(cat <<'EOF'
+Refine project scaffolding based on architecture review
+
+Applied fixes from Software Architect and Code Reviewer agents.
+
+Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
+EOF
+)"
+git push
+```
+
+If there are questions, ask the user with `AskUserQuestion` and adjust based on their answers.
+
+If no blockers or suggestions — skip straight to the summary.
+
+## 7. Summary
 
 After everything is created, show the user:
 
@@ -531,4 +642,5 @@ After everything is created, show the user:
   >
   > Without this, the roadmap-sync workflow won't be able to create PRs or push changes.
 
+- Architecture review results (if step 6 ran): blockers fixed, suggestions applied, questions resolved
 - Next steps (e.g., "Drop an icon at `assets/<project-name>-icon.png`", "Run `/next` to start working through the roadmap")
