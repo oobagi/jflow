@@ -1,9 +1,6 @@
 ---
 name: checkup
-description: >
-  Git repo health checkup and cleanup. Removes stale worktrees and branches that are merged
-  or behind main, prunes remotes, runs gc, and checks for repo hygiene issues like forgotten
-  stashes, large untracked files, and corruption. Use "now" to skip confirmation.
+description: Git repo health checkup and cleanup — removes stale worktrees/branches, prunes remotes, runs gc, and flags repo hygiene issues. Use "now" to skip confirmation.
 user-invocable: true
 argument-hint: ["now" to skip confirmation and clean immediately]
 allowed-tools: Bash, Read, Glob, Grep, Agent
