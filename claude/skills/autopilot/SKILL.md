@@ -19,11 +19,11 @@ Fully automated development loop. Reads ROADMAP.md and works through every uncom
 
 Check `$ARGUMENTS` for:
 
-- **`yolo`** — skip all confirmation prompts between items. Just go.
+- **`interactive`** — pause and confirm before each item. By default, autopilot runs without stopping.
 - **`phase-N`** (e.g., `phase-2`) — start at that phase, skipping earlier phases.
 - **An issue number** — start from that specific issue and continue forward.
 
-These can be combined: `yolo phase-2` means "start at phase 2, no confirmations."
+These can be combined: `interactive phase-2` means "start at phase 2, confirm before each item."
 
 ## 1. Read the roadmap
 
