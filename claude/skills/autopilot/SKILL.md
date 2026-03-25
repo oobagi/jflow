@@ -6,7 +6,7 @@ description: >
   Use "yolo" to skip confirmations. Use "phase-N" to start at a specific phase.
 user_invocable: true
 argument-hint: >
-  ["yolo" to skip confirmations | "phase-N" to start at phase N | both: "yolo phase-2"]
+  ["interactive" to confirm before each item | "phase-N" to start at phase N | both: "interactive phase-2"]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill, TaskCreate, TaskUpdate, TaskList
 effort: high
 ---
