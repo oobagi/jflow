@@ -10,7 +10,7 @@ allowed-tools: Bash, Read, Glob, Grep, Agent
 effort: high
 ---
 
-# Clean
+# Checkup
 
 Run a health checkup on the current git repo and clean up stale artifacts.
 Run all independent information-gathering steps in parallel where possible.
