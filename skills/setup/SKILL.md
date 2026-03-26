@@ -537,10 +537,11 @@ This format is what the `roadmap-sync.yml` workflow matches against with its `se
 Enable branch protection on `main` to require PRs and status checks:
 
 ```bash
-# Enable auto-merge on the repo
+# Enable auto-merge and auto-delete branches on merge
 gh api repos/<user>/<repo> \
   -X PATCH \
-  -f allow_auto_merge=true
+  -f allow_auto_merge=true \
+  -f delete_branch_on_merge=true
 
 # Create branch protection rule
 gh api repos/<user>/<repo>/branches/main/protection \
