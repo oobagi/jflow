@@ -4,7 +4,7 @@ description: >
   Post-implementation quality pipeline for ad-hoc work — runs /simplify → /harden → /test → /ship
   in sequence. Use when you've built something on the fly and want to clean it up and ship it.
   Use "dry-run" to preview scope without executing. Use "no-ship" to stop before shipping.
-user_invocable: true
+user-invocable: true
 argument-hint: >
   ["dry-run" to preview | "no-ship" to stop before /ship | "skip-simplify" | "skip-harden" | combine: "no-ship skip-simplify"]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill, TaskCreate, TaskUpdate, TaskList

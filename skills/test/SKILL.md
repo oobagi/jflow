@@ -1,8 +1,12 @@
 ---
 name: test
-description: Run Code Reviewer and Reality Checker agents against uncommitted changes to validate before shipping.
-user_invocable: true
+description: >
+  Run review agents (Code Reviewer, Reality Checker, Security Engineer, and conditional specialists)
+  against uncommitted changes to validate before shipping.
+user-invocable: true
 argument-hint: [optional focus area, e.g. "security" or "performance"]
+allowed-tools: Bash, Read, Glob, Grep, Agent, AskUserQuestion
+effort: high
 ---
 
 # Test

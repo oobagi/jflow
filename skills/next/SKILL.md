@@ -1,8 +1,10 @@
 ---
 name: next
 description: Pick up the next roadmap item (or a specific issue), work in a worktree. Use "parallel" to also suggest parallel issues.
-user_invocable: true
+user-invocable: true
 argument-hint: [issue number | "parallel" to also suggest parallel issues]
+allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
+effort: high
 ---
 
 # Next

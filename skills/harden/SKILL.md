@@ -3,7 +3,7 @@ name: harden
 description: >
   Analyze and implement code safety systems — structured error logging, input validation,
   error boundaries, and graceful degradation. Use "audit" for report-only mode.
-user_invocable: true
+user-invocable: true
 argument-hint: >
   ["audit" for report only | "fix" to implement (default) | focus: "logging", "validation", "errors", "boundaries"]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, TaskCreate, TaskUpdate, TaskList

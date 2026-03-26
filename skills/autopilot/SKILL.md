@@ -2,10 +2,10 @@
 name: autopilot
 description: >
   Fully automated development loop — iterates through ROADMAP.md items one at a time,
-  running /next → /test → /harden → /ship for each. Runs /docs, /simplify, and /checkup at phase boundaries.
+  running /next → /harden → /test → /ship for each. Runs /docs, /simplify, and /checkup at phase boundaries.
   Auto-compacts context when usage exceeds threshold (default 35%). Use "interactive" to confirm before each item.
   Use "phase-N" to start at a specific phase. Use "dry-run" to preview without executing.
-user_invocable: true
+user-invocable: true
 argument-hint: >
   ["interactive" | "phase-N" | "dry-run" | "compact-N%" to set compact threshold (default 35%) | combine: "interactive phase-2 compact-80%"]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill, TaskCreate, TaskUpdate, TaskList
@@ -14,7 +14,7 @@ effort: high
 
 # Autopilot
 
-Fully automated development loop. Reads ROADMAP.md and works through every uncompleted item in order: `/next` → `/test` → `/harden` → `/ship`, with `/docs`, `/simplify`, and `/checkup` at phase boundaries. Auto-compacts context to stay within window limits.
+Fully automated development loop. Reads ROADMAP.md and works through every uncompleted item in order: `/next` → `/harden` → `/test` → `/ship`, with `/docs`, `/simplify`, and `/checkup` at phase boundaries. Auto-compacts context to stay within window limits.
 
 ## Agent dispatch policy
 
@@ -25,8 +25,8 @@ The table below is the **minimum baseline**, not a ceiling. If a specific situat
 | Skill | Baseline agents | Conditional agents |
 |-------|----------------|-------------------|
 | `/next` | Frontend Developer OR Backend Architect OR Software Architect (choose by issue type) | — |
-| `/test` | Code Reviewer, Reality Checker, Security Engineer | Accessibility Auditor (UI changes), API Tester (API changes), Performance Benchmarker (perf-sensitive changes) |
 | `/harden` | Security Engineer (parallel with manual audit) | — |
+| `/test` | Code Reviewer, Reality Checker, Security Engineer | Accessibility Auditor (UI changes), API Tester (API changes), Performance Benchmarker (perf-sensitive changes) |
 | `/docs` | Technical Writer (review before applying fixes) | — |
 | `/simplify` | code-simplifier agents (DRY, dead code, logic — already defined in skill) | — |
 
@@ -138,18 +138,7 @@ If `/next` fails or the implementation agent reports a problem it can't resolve:
 - Report which item failed and why.
 - Tell the user to fix it manually and re-run `/autopilot` to continue from where it left off.
 
-### 3c. Run `/test`
-
-Invoke the `test` skill to validate the implementation. This:
-- Runs lint, tests, code review, and reality check
-- Auto-fixes blockers if possible
-
-If `/test` finds unfixable blockers:
-- **Stop the loop.**
-- Report the blockers.
-- Tell the user to fix them manually, then run `/ship` followed by `/autopilot` to resume.
-
-### 3d. Run `/harden fix`
+### 3c. Run `/harden fix`
 
 Invoke the `harden` skill in fix mode, scoped to the files changed by `/next`. This:
 - Audits changed files for error handling gaps, missing logging, validation issues, and boundary protection
@@ -160,9 +149,20 @@ Invoke the `harden` skill in fix mode, scoped to the files changed by `/next`. T
 If `/harden` introduces regressions it can't resolve:
 - **Stop the loop.**
 - Report which fixes caused the issue.
-- Tell the user to review manually, then run `/ship` followed by `/autopilot` to resume.
+- Tell the user to fix manually, then run `/test` followed by `/ship` and `/autopilot` to resume.
 
 If `/harden` finds no issues, it reports clean and moves on immediately.
+
+### 3d. Run `/test`
+
+Invoke the `test` skill to validate everything — the implementation from `/next` plus any changes from `/harden`. This is the **final gate before shipping**. It:
+- Runs lint, tests, code review, and reality check
+- Auto-fixes blockers if possible
+
+If `/test` finds unfixable blockers:
+- **Stop the loop.**
+- Report the blockers.
+- Tell the user to fix them manually, then run `/test` followed by `/ship` and `/autopilot` to resume.
 
 ### 3e. Run `/ship`
 
@@ -189,9 +189,9 @@ Track cumulative durations across items so the summary can report average time p
 
 ### 3g. Auto-compact context
 
-After each item, check context usage by running `/context`. If usage exceeds the compact threshold (default 35%):
+After each item, check context usage. **Note:** `/context` and `/compact` are built-in Claude Code CLI commands, not jstack skills — do NOT invoke them via the Skill tool. Instead, check the context usage indicator in the conversation and use the `/compact` slash command directly when needed. If usage exceeds the compact threshold (default 35%):
 
-1. Run `/compact` to compress conversation context
+1. Run `/compact` (built-in CLI command) to compress conversation context
 2. After compact, briefly re-state the current position:
 
 > **Resuming autopilot.** Phase N, item M of total. Next: #X — Title
@@ -266,4 +266,4 @@ The user can always:
 - Be concise between items — the user is watching a stream of work, not reading docs
 - Use clear status markers: starting / implementing / testing / shipping / done
 - Bold the current item and phase at each step so it's easy to scan
-- If in yolo mode, still print one-line status updates per item (don't go silent)
+- Even in non-interactive mode, still print one-line status updates per item (don't go silent)
