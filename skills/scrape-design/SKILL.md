@@ -25,17 +25,45 @@ Normalize the URL (add `https://` if missing, strip trailing slashes).
 
 ## 1. Fetch the site
 
-Use `WebFetch` to retrieve the target URL. Fetch the **full HTML** — we need the raw markup, inline styles, stylesheet links, and meta tags.
+Use the **Playwright MCP** tools to load the site in a real browser. This gives us raw HTML, computed CSS, and JavaScript-rendered content that `WebFetch` would strip.
 
-From the initial fetch, extract:
-- **Navigation links** — identify 3-5 distinct page types (e.g., homepage, about, pricing, blog post, docs). Pick links that look structurally different, not just different content.
-- **External stylesheet URLs** — linked CSS files (`<link rel="stylesheet" href="...">`). Fetch the primary stylesheet(s) with `WebFetch` to extract the full design token set.
-- **Meta information** — `<title>`, `<meta name="description">`, Open Graph tags, favicon, theme-color meta tag.
-- **Font references** — Google Fonts links, Adobe Fonts, `@font-face` declarations, or font CDN URLs.
+### 1a. Load the homepage
 
-**Always fetch subpages.** After the homepage, fetch 2-4 additional pages that are structurally distinct (e.g., a content page, a listing page, a form/input page, a minimal page). Prioritize pages that reveal different layout patterns or component types not visible on the homepage.
+Use Playwright to navigate to the target URL. Once loaded:
 
-**Important:** Capture all raw CSS custom properties (`:root { --var: value }`) and Tailwind class patterns. These are the ground truth for the design system.
+- **Snapshot the page** — get the full DOM / accessibility tree to understand structure.
+- **Extract raw CSS** — execute JavaScript in the page to collect:
+  - All CSS custom properties from `:root` and other selectors (`getComputedStyle`, `document.styleSheets`)
+  - All `<link rel="stylesheet">` hrefs — fetch each stylesheet's raw content
+  - All `<style>` blocks (inline stylesheets)
+  - Computed styles on key elements (headings, body, buttons, cards, nav) — font-family, font-size, color, background, padding, margin, border-radius, box-shadow
+- **Extract meta information** — `<title>`, `<meta name="description">`, Open Graph tags, favicon, theme-color meta tag.
+- **Extract font references** — Google Fonts links, Adobe Fonts, `@font-face` declarations, font CDN URLs.
+- **Capture navigation links** — identify 3-5 distinct page types (e.g., homepage, about, pricing, blog post, docs). Pick links that look structurally different, not just different content.
+- **Screenshot the page** — take a full-page screenshot for visual reference.
+
+### 1b. Validate the fetch
+
+Check that the page returned meaningful content:
+
+- If the DOM is mostly empty, contains a Cloudflare/bot-check challenge, or is a single-frame SPA that didn't render, **stop and tell the user**:
+  ```
+  Could not scrape [URL] — the site returned [reason: bot protection / empty SPA shell / login wall].
+  Try: provide a publicly accessible URL, or paste the site's HTML/CSS directly.
+  ```
+- If the page rendered but is clearly a cookie consent / age gate overlay, attempt to dismiss it and re-snapshot.
+
+### 1c. Fetch subpages
+
+**Always fetch subpages.** After the homepage, navigate to 2-4 additional pages that are structurally distinct (e.g., a content page, a listing page, a form/input page, a minimal page). Prioritize pages that reveal different layout patterns or component types not visible on the homepage.
+
+For each subpage: snapshot the DOM, extract computed styles on new element types, and screenshot.
+
+### 1d. Collect raw CSS
+
+Combine all extracted stylesheets, inline styles, and CSS custom properties into a single CSS corpus. This is the ground truth for the design system — exact values, not approximations.
+
+If Playwright MCP is unavailable (not installed or fails to connect), fall back to `WebFetch` and `WebSearch`. Note in the output that values are approximate since raw CSS was not available.
 
 ---
 
@@ -160,28 +188,28 @@ Collect all three agent results. Resolve any conflicts (e.g., different agents n
 Before writing, check if `docs/design/` already exists. Use `Glob` to scan for `docs/design/**/*.md`.
 
 - **If no existing docs:** create `docs/design/` and write all files fresh.
-- **If existing docs found:** read each existing file. Compare the scraped data against what's already documented. Use `AskUserQuestion` to present a summary of major differences and ask which files to replace vs merge vs skip. For example:
+- **If existing docs found:** read each existing file. Compare the scraped data against what's already documented. Use `AskUserQuestion` to present a diff summary and one top-level choice:
 
   ```
   Existing design docs found in docs/design/:
 
-  Files with major differences (scraped site diverges significantly):
+  Major differences (scraped site diverges significantly):
     - colors.md — current: 6 brand colors, warm palette. Scraped: 4 brand colors, cool palette.
     - typography.md — current: Inter/Mono stack. Scraped: Geist/Geist Mono stack.
 
-  Files with minor differences (scraped site mostly aligns):
+  Minor differences:
     - spacing.md — same 4px base, slightly different scale steps.
 
-  Files not yet documented (new from scrape):
-    - effects.md — not present, will create.
+  New (will create):
+    - effects.md
 
-  For each file with major differences, should I:
-    (a) Replace with scraped version
-    (b) Merge (keep existing, add scraped as "Reference: [site name]" section)
-    (c) Skip
+  How should I handle files with differences?
+    (a) Replace all — overwrite everything with scraped version
+    (b) Merge all — keep existing, add scraped data as "Reference: [site name]" section
+    (c) Let me pick per file
   ```
 
-  Respect the user's choices. Default to **merge** for files with major differences if the user doesn't specify.
+  If the user picks **(c)**, follow up with per-file choices. Otherwise apply their bulk choice to all files. New files (not yet documented) are always created regardless of choice.
 
 ### 3b. Write the design docs
 
