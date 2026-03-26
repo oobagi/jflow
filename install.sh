@@ -90,33 +90,23 @@ install_repo() {
 
 # --- Symlink skills ---
 install_skills() {
-  local count=0
-  run mkdir -p "$CLAUDE_DIR/skills"
-
-  for skill_dir in "$JSTACK_DIR"/skills/*/; do
-    [ -d "$skill_dir" ] || continue
-    local name=$(basename "$skill_dir")
-    local target="$CLAUDE_DIR/skills/$name"
-
-    run mkdir -p "$target"
-    run ln -sf "$JSTACK_DIR/skills/$name/SKILL.md" "$target/SKILL.md"
-    count=$((count + 1))
-  done
+  # Remove old per-skill symlinks if present
+  if [ -d "$CLAUDE_DIR/skills" ] && [ ! -L "$CLAUDE_DIR/skills" ]; then
+    run rm -rf "$CLAUDE_DIR/skills"
+  fi
+  run ln -sfn "$JSTACK_DIR/skills" "$CLAUDE_DIR/skills"
+  local count=$(find "$JSTACK_DIR/skills" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
   info "Linked $count skills"
 }
 
 # --- Symlink agents ---
 install_agents() {
-  local count=0
-  run mkdir -p "$CLAUDE_DIR/agents"
-
-  for agent_file in "$JSTACK_DIR"/agents/*.md; do
-    [ -f "$agent_file" ] || continue
-    local name=$(basename "$agent_file")
-
-    run ln -sf "$JSTACK_DIR/agents/$name" "$CLAUDE_DIR/agents/$name"
-    count=$((count + 1))
-  done
+  # Remove old per-agent symlinks if present
+  if [ -d "$CLAUDE_DIR/agents" ] && [ ! -L "$CLAUDE_DIR/agents" ]; then
+    run rm -rf "$CLAUDE_DIR/agents"
+  fi
+  run ln -sfn "$JSTACK_DIR/agents" "$CLAUDE_DIR/agents"
+  local count=$(find "$JSTACK_DIR/agents" -mindepth 1 -maxdepth 1 -name '*.md' | wc -l | tr -d ' ')
   info "Linked $count agents"
 }
 
@@ -265,8 +255,11 @@ install_rtk() {
 uninstall() {
   echo "Uninstalling jstack..."
 
-  # Remove skill symlinks pointing to jstack
-  if [ -d "$CLAUDE_DIR/skills" ]; then
+  # Remove skills directory symlink (or legacy per-skill symlinks)
+  if [ -L "$CLAUDE_DIR/skills" ]; then
+    run rm "$CLAUDE_DIR/skills"
+    info "Removed skills symlink"
+  elif [ -d "$CLAUDE_DIR/skills" ]; then
     for skill_dir in "$CLAUDE_DIR"/skills/*/; do
       [ -d "$skill_dir" ] || continue
       local link="$skill_dir/SKILL.md"
@@ -278,8 +271,11 @@ uninstall() {
     done
   fi
 
-  # Remove agent symlinks pointing to jstack
-  if [ -d "$CLAUDE_DIR/agents" ]; then
+  # Remove agents directory symlink (or legacy per-agent symlinks)
+  if [ -L "$CLAUDE_DIR/agents" ]; then
+    run rm "$CLAUDE_DIR/agents"
+    info "Removed agents symlink"
+  elif [ -d "$CLAUDE_DIR/agents" ]; then
     for agent_file in "$CLAUDE_DIR"/agents/*.md; do
       [ -f "$agent_file" ] || [ -L "$agent_file" ] || continue
       if [ -L "$agent_file" ] && readlink "$agent_file" | grep -q "\.jstack\|jstack" 2>/dev/null; then
