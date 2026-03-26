@@ -1,7 +1,9 @@
 ---
 name: ship
 description: Branch, commit, PR, merge, and cleanup. Use when work is ready to ship.
-user_invocable: true
+user-invocable: true
+allowed-tools: Bash, Read, Glob, Grep
+effort: medium
 ---
 
 # Ship

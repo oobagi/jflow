@@ -3,7 +3,7 @@ name: issue
 description: >
   Turn a rough idea or complaint into a well-scoped GitHub issue with context, solution avenues,
   task list, and test plan. Just yap about the problem and get a polished issue.
-user_invocable: true
+user-invocable: true
 argument-hint: >
   [describe the problem or feature in plain language, e.g. "the login button doesn't work on mobile" | "add dark mode"]
 allowed-tools: Bash, Read, Glob, Grep, Agent, AskUserQuestion, TaskCreate, TaskUpdate

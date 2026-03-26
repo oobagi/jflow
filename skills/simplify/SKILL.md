@@ -4,7 +4,7 @@ description: >
   Deep codebase simplification — dispatches parallel agents to fix DRY violations,
   remove dead code, and simplify logic. Creates reusable helpers for repeated patterns.
   Integrates into /autopilot at phase boundaries.
-user_invocable: true
+user-invocable: true
 argument-hint: >
   ["full" for entire codebase | "scope:src/api" to limit scope | "dry-only" | "dead-only" | "logic-only"]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill, TaskCreate, TaskUpdate, TaskList

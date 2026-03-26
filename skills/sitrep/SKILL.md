@@ -4,7 +4,6 @@ description: >
   Situation report for the current project. Use when returning after being away from a project
   or Claude Code session, when you can't remember what was done, or to orient in a fresh repo.
   Shows recent activity, branch health, stale worktrees, uncommitted work, and project context.
-disable-model-invocation: false
 user-invocable: true
 allowed-tools: Bash, Read, Glob, Grep, Agent
 effort: high

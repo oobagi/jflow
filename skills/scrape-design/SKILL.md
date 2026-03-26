@@ -116,9 +116,9 @@ For EACH distinct component type found on the site, document:
 - Footer structure (columns, link groups, social links)
 - In-page navigation (sticky headers, scroll indicators, breadcrumbs)
 
-### Agent C: Design Philosophy & Identity (`subagent_type: "Level Designer"`)
+### Agent C: Design Philosophy & Identity (`subagent_type: "UX Researcher"`)
 
-Scope this agent to **spatial storytelling and visual pacing analysis** — NOT game level design. Provide the fetched HTML content and tell it to analyze:
+Provide the fetched HTML content and tell it to analyze the site's design philosophy, visual pacing, and identity from a user experience perspective:
 
 **Design Philosophy:**
 - **Overall aesthetic** — what design movement does this site align with? (minimalist, maximalist, brutalist, neomorphic, glassmorphic, organic, corporate, playful, etc.)
