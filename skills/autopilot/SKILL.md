@@ -2,18 +2,19 @@
 name: autopilot
 description: >
   Fully automated development loop — iterates through ROADMAP.md items one at a time,
-  running /next → /test → /harden → /ship for each. Runs /checkup and /simplify at phase boundaries.
-  Use "interactive" to confirm before each item. Use "phase-N" to start at a specific phase.
+  running /next → /test → /harden → /ship for each. Runs /docs, /simplify, and /checkup at phase boundaries.
+  Auto-compacts context when usage exceeds threshold (default 35%). Use "interactive" to confirm before each item.
+  Use "phase-N" to start at a specific phase. Use "dry-run" to preview without executing.
 user_invocable: true
 argument-hint: >
-  ["interactive" to confirm before each item | "phase-N" to start at phase N | both: "interactive phase-2"]
+  ["interactive" | "phase-N" | "dry-run" | "compact-N%" to set compact threshold (default 35%) | combine: "interactive phase-2 compact-80%"]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill, TaskCreate, TaskUpdate, TaskList
 effort: high
 ---
 
 # Autopilot
 
-Fully automated development loop. Reads ROADMAP.md and works through every uncompleted item in order: `/next` → `/test` → `/harden` → `/ship`, with `/checkup` and `/simplify` at phase boundaries.
+Fully automated development loop. Reads ROADMAP.md and works through every uncompleted item in order: `/next` → `/test` → `/harden` → `/ship`, with `/docs`, `/simplify`, and `/checkup` at phase boundaries. Auto-compacts context to stay within window limits.
 
 ## 0. Parse arguments
 
@@ -21,9 +22,11 @@ Check `$ARGUMENTS` for:
 
 - **`interactive`** — pause and confirm before each item. By default, autopilot runs without stopping.
 - **`phase-N`** (e.g., `phase-2`) — start at that phase, skipping earlier phases.
+- **`dry-run`** — preview the plan without executing anything (see step 1b).
+- **`compact-N%`** (e.g., `compact-80%`) — compact context when usage exceeds N%. Default: `35%`.
 - **An issue number** — start from that specific issue and continue forward.
 
-These can be combined: `interactive phase-2` means "start at phase 2, confirm before each item."
+These can be combined: `interactive phase-2 compact-80%` means "start at phase 2, confirm before each item, compact at 80% context usage."
 
 ## 1. Read the roadmap
 
@@ -49,7 +52,40 @@ Count total items to work through and report:
 
 > **Autopilot engaged.** N items remaining across M phases.
 > Starting with: #X — Title
-> Mode: [autopilot | interactive]
+> Mode: [autopilot | interactive | dry-run]
+> Compact threshold: N%
+
+### 1b. Dry-run mode
+
+If `dry-run` was specified, print the full plan and stop. Do NOT execute anything.
+
+```
+═══════════════════════════════════════
+  Autopilot Dry Run
+═══════════════════════════════════════
+
+  Items: N remaining across M phases
+  Compact threshold: K%
+
+  Phase 1: Foundation
+    1. #1 — Project scaffolding and CI setup
+    2. #3 — Database schema
+    ── phase boundary: /docs → /simplify → /checkup ──
+
+  Phase 2: Core Features
+    3. #4 — User authentication
+    4. #5 — API endpoints
+    5. #6 — Frontend views
+    ── phase boundary: /docs → /simplify → /checkup ──
+
+  Compact threshold: K% (compacts triggered as needed)
+
+  Run without dry-run to execute:
+    /autopilot phase-1
+═══════════════════════════════════════
+```
+
+After printing, exit. Do not proceed to step 2.
 
 ## 2. Create progress tracker
 
@@ -73,6 +109,8 @@ If in interactive mode, ask the user:
 In default (autopilot) mode, skip this prompt entirely.
 
 ### 3b. Run `/next <issue-number>`
+
+Record the start time for this item: `item_start=$(date +%s)`.
 
 Invoke the `next` skill with the issue number. This:
 - Picks up the issue
@@ -124,22 +162,38 @@ If `/ship` fails (e.g., CI fails, merge blocked):
 
 ### 3f. Mark progress
 
+Record end time and compute duration: `item_end=$(date +%s); duration=$((item_end - item_start))`.
+
 Update the task for this item to `completed`. Log:
 - Issue number and title
 - PR URL (from `/ship` output)
-- Time taken (if trackable)
+- Duration (formatted as `Xm Ys`)
 
-### 3g. Phase boundary check
+Track cumulative durations across items so the summary can report average time per item.
+
+### 3g. Auto-compact context
+
+After each item, check context usage by running `/context`. If usage exceeds the compact threshold (default 35%):
+
+1. Run `/compact` to compress conversation context
+2. After compact, briefly re-state the current position:
+
+> **Resuming autopilot.** Phase N, item M of total. Next: #X — Title
+
+This prevents context exhaustion on long runs. The threshold is configurable via `compact-N%` argument — lower values (25-35%) for aggressive compaction, higher values (60%+) to let context accumulate longer.
+
+### 3h. Phase boundary check
 
 After completing an item, check: **is this the last item in the current phase?**
 
 If yes:
-1. Announce: `Phase N complete. Running simplify + checkup...`
-2. Invoke the `simplify` skill (no arguments — it auto-scopes to changes since last simplify). This cleans up DRY violations, dead code, and complex logic accumulated during the phase. If simplify produces changes, ship them with `/ship` using commit message `simplify: phase N cleanup`.
-3. Invoke the `checkup` skill with `now` (auto-clean without confirmation).
-4. Report simplify and checkup results before continuing to the next phase.
+1. Announce: `Phase N complete. Running docs → simplify → checkup...`
+2. Invoke the `docs` skill to sync documentation (README, AGENTS.md, CHANGELOG, etc.) with the code changes from this phase. If docs produces changes, ship them with `/ship` using commit message `docs: sync after phase N`.
+3. Invoke the `simplify` skill (no arguments — it auto-scopes to changes since last simplify). This cleans up DRY violations, dead code, and complex logic accumulated during the phase. If simplify produces changes, ship them with `/ship` using commit message `simplify: phase N cleanup`.
+4. Invoke the `checkup` skill with `now` (auto-clean without confirmation).
+5. Report docs, simplify, and checkup results before continuing to the next phase.
 
-Also run `/checkup now` (without `/simplify`) if:
+Also run `/checkup now` (without `/docs` or `/simplify`) if:
 - 5+ items have been shipped since the last checkup (even mid-phase)
 - The autopilot run is ending (final item completed)
 
@@ -155,11 +209,17 @@ When the loop finishes (all items done, or user stopped it), print a full summar
   Items shipped:  7 / 12
   Items skipped:  1
   Phases cleared: 2 (Phase 1, Phase 2)
+  Total time:     1h 23m (avg 11m 51s/item)
+  Compacts:       2 (threshold: 35%)
 
   PRs merged:
-    • #14 — feat: add WASD controls (Closes #3)
-    • #15 — feat: implement save system (Closes #4)
+    • #14 — feat: add WASD controls (Closes #3) [8m 12s]
+    • #15 — feat: implement save system (Closes #4) [14m 33s]
     • ...
+
+  Docs syncs: 2
+    • Phase 1 — updated README quickstart, AGENTS.md structure
+    • Phase 2 — added API docs, updated CHANGELOG
 
   Simplify passes: 2
     • Phase 1 — 3 helpers created, 12 dead items removed, 5 logic simplifications
