@@ -16,6 +16,22 @@ effort: high
 
 Fully automated development loop. Reads ROADMAP.md and works through every uncompleted item in order: `/next` → `/test` → `/harden` → `/ship`, with `/docs`, `/simplify`, and `/checkup` at phase boundaries. Auto-compacts context to stay within window limits.
 
+## Agent dispatch policy
+
+**You MUST use specialized agents throughout the autopilot run.** Each sub-skill has agents it should dispatch — this is not optional. Do not fall back to doing everything yourself when an agent exists for the job.
+
+The table below is the **minimum baseline**, not a ceiling. If a specific situation calls for a different or additional agent — use your judgment and dispatch it. You have access to the full agent roster.
+
+| Skill | Baseline agents | Conditional agents |
+|-------|----------------|-------------------|
+| `/next` | Frontend Developer OR Backend Architect OR Software Architect (choose by issue type) | — |
+| `/test` | Code Reviewer, Reality Checker, Security Engineer | Accessibility Auditor (UI changes), API Tester (API changes), Performance Benchmarker (perf-sensitive changes) |
+| `/harden` | Security Engineer (parallel with manual audit) | — |
+| `/docs` | Technical Writer (review before applying fixes) | — |
+| `/simplify` | code-simplifier agents (DRY, dead code, logic — already defined in skill) | — |
+
+When invoking each sub-skill, the skill's own instructions specify which agents to launch and when. Follow them — do not skip agent dispatches to save time. Beyond the baseline, dispatch any additional agent that fits the situation (e.g., UX Researcher for a user-facing feature, Product Manager for scope questions, Accessibility Auditor for a11y-sensitive work).
+
 ## 0. Parse arguments
 
 Check `$ARGUMENTS` for:

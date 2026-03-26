@@ -25,7 +25,9 @@ Launch these agents **in parallel** (single message, multiple Agent tool calls):
 
 Tell it to review all uncommitted changes. It should:
 - Read every modified and new file
-- Focus on correctness, security, maintainability, performance, and test coverage
+- Focus on correctness, maintainability, and test coverage
+- **Defer security to the Security Engineer** — do not duplicate security findings
+- **Defer performance to the Performance Benchmarker** (if launched) — flag only obvious perf bugs, not deep analysis
 - Use its priority markers: blocker, suggestion, nit
 - Report findings only — do NOT make changes
 
@@ -37,11 +39,27 @@ Tell it to evaluate the implementation against the issue spec or design docs. It
 - Assess: does the implementation match the spec? Any gaps?
 - Give an honest verdict — do NOT make changes
 
-If `$ARGUMENTS` contains a focus area (e.g., "security"), tell both agents to weight that area more heavily.
+### Security Engineer (`subagent_type: "Security Engineer"`)
+
+Tell it to review all uncommitted changes for security vulnerabilities. It should:
+- Read every modified and new file
+- Focus on: injection flaws, auth/authz issues, data exposure, insecure defaults, dependency risks
+- Flag findings as blocker or suggestion
+- Report findings only — do NOT make changes
+
+### Conditional agents (launch in the same parallel batch if applicable)
+
+Check the changed files to determine which of these additional agents to include:
+
+- **Accessibility Auditor** (`subagent_type: "Accessibility Auditor"`) — launch if changes touch UI/frontend files (`.tsx`, `.jsx`, `.vue`, `.svelte`, `.html`, CSS, SwiftUI views). Tell it to audit the changed components for WCAG compliance, focus management, and screen reader compatibility.
+- **API Tester** (`subagent_type: "API Tester"`) — launch if changes touch API routes, handlers, or endpoint definitions. Tell it to validate request/response contracts, error handling, status codes, and edge cases.
+- **Performance Benchmarker** (`subagent_type: "Performance Benchmarker"`) — launch if changes touch database queries, hot loops, data processing, or rendering logic. Tell it to identify potential performance regressions.
+
+If `$ARGUMENTS` contains a focus area (e.g., "security"), tell all agents to weight that area more heavily.
 
 ## 4. Summarize findings
 
-Collect results from both agents and present a unified summary:
+Collect results from all agents and present a unified summary. **Deduplicate** — if multiple agents flagged the same issue, keep the most detailed finding and drop the rest.
 
 - **Blockers** — must fix before shipping (from either agent)
 - **Suggestions** — should fix, but not blocking
