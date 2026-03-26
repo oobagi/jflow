@@ -43,6 +43,8 @@ Read project files to determine the tech stack and what safety patterns are idio
 
 Run a systematic scan across four safety domains. Use `Grep` and `Glob` extensively, and spawn an **Explore agent** for deeper analysis if the codebase is large.
 
+**In parallel with the manual scan below**, launch a **Security Engineer** agent (`subagent_type: "Security Engineer"`). Give it the list of in-scope files and tell it to focus on areas the manual Grep/Glob scan **cannot catch well**: threat modeling, business logic vulnerabilities, auth/authz design flaws, and contextual security review that requires understanding data flow across files. The manual scan (2a–2d below) handles the mechanical pattern-matching — the Security Engineer handles the judgment calls. Deduplicate overlapping findings in step 3, keeping the more detailed version.
+
 ### 2a. Error handling gaps
 
 Search for:

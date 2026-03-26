@@ -552,7 +552,7 @@ gh api repos/<user>/<repo>/branches/main/protection \
     "strict": true,
     "contexts": ["test"]
   },
-  "enforce_admins": false,
+  "enforce_admins": true,
   "required_pull_request_reviews": null,
   "restrictions": null
 }
@@ -565,22 +565,39 @@ Adapt the `contexts` array to match the actual job name(s) in `ci.yml`. If the C
 
 ### 5d. Set up ROADMAP_PAT secret
 
-The roadmap-sync workflow needs a `ROADMAP_PAT` secret (a GitHub PAT with `repo` scope) to create PRs when issues are closed/reopened.
+The roadmap-sync workflow needs a `ROADMAP_PAT` secret (a fine-grained GitHub PAT with repo contents/issues/PRs permissions) to create PRs when issues are closed/reopened.
 
-Check if it's already set:
+**Step 1 — Check if already set on this repo:**
 
 ```bash
 gh secret list --repo <user>/<repo> | grep ROADMAP_PAT
 ```
 
-- **If it exists:** skip — the user already has one from a previous `/setup`.
-- **If it doesn't exist:** ask the user with `AskUserQuestion`:
+If it exists, skip — done.
 
-> **Roadmap auto-sync needs a GitHub token.** If you've already created one for another repo, you can reuse it. Otherwise:
+**Step 2 — Check the `ROADMAP_PAT` environment variable:**
+
+```bash
+echo "${ROADMAP_PAT:-(not set)}"
+```
+
+- **If the env var is set:** use it automatically — no user interaction needed:
+
+```bash
+echo "$ROADMAP_PAT" | gh secret set ROADMAP_PAT --repo <user>/<repo>
+```
+
+Verify with `gh secret list --repo <user>/<repo> | grep ROADMAP_PAT`, then move on silently.
+
+- **If the env var is not set:** ask the user with `AskUserQuestion`:
+
+> **Roadmap auto-sync needs a GitHub fine-grained PAT.** If you already have one you use across repos, paste it here. Otherwise:
 >
-> 1. Go to https://github.com/settings/tokens → **Generate new token (classic)**
-> 2. Give it a name like `roadmap-sync`, select the `repo` scope, and set a long expiration
+> 1. Go to https://github.com/settings/tokens?type=beta → **Generate new token**
+> 2. Name it `roadmap-sync`, select **All repositories**, and grant: **Contents** (Read and write), **Issues** (Read and write), **Pull requests** (Read and write)
 > 3. Copy the token
+>
+> **Tip:** To skip this prompt on future repos, add `export ROADMAP_PAT=<your-token>` to your shell profile.
 >
 > Paste your token here (it will be stored as a repo secret, not logged):
 
@@ -681,9 +698,10 @@ Build the list dynamically based on what the project actually needs. Only includ
 **Note:** Only include the ROADMAP_PAT item if the user skipped it during step 5d:
 ```
 - [ ] Create ROADMAP_PAT secret for roadmap auto-sync:
-      1. Go to https://github.com/settings/tokens → Generate new token (classic) with repo scope
+      1. Go to https://github.com/settings/tokens?type=beta → Generate new fine-grained token
+         Permissions: Contents (RW), Issues (RW), Pull requests (RW) — scope to All repositories
       2. Run: echo "<your-token>" | gh secret set ROADMAP_PAT --repo <user>/<repo>
-      Tip: one token works across all your repos — reuse it for future /setup runs.
+      Tip: add `export ROADMAP_PAT=<token>` to your shell profile so future /setup runs set it automatically.
 ```
 
 **Examples of project-specific items** (include only what's relevant):

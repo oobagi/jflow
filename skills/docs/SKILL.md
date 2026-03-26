@@ -64,7 +64,18 @@ For each doc file, check for these categories of staleness:
 - If AGENTS.md or README describes the directory structure, verify it matches reality
 - Check for new top-level directories not mentioned in docs
 
-## 3. Apply fixes
+## 3. Review with Technical Writer
+
+Before applying fixes, launch a **Technical Writer** agent (`subagent_type: "Technical Writer"`) in parallel with your fix planning. Give it all the documentation files and the staleness findings from step 2. Tell it to:
+
+- Review the accuracy and clarity of existing documentation
+- Identify sections that are confusing, ambiguous, or poorly structured
+- Suggest improved wording for any stale references you're about to fix
+- Flag any missing documentation that should exist based on the codebase
+
+Merge its suggestions into the fixes below. Do not change the author's voice or style — only incorporate suggestions that improve factual accuracy or fix genuinely confusing language.
+
+## 4. Apply fixes
 
 For each stale reference found:
 
@@ -98,7 +109,7 @@ If `$ARGUMENTS` contains `changelog`:
 4. Write a new version entry at the top of CHANGELOG.md following the existing format
 5. If no CHANGELOG.md exists, create one with the standard Keep a Changelog format
 
-## 4. Commit changes
+## 5. Commit changes
 
 If any files were modified:
 
@@ -114,7 +125,7 @@ EOF
 )"
 ```
 
-## 5. Summary
+## 6. Summary
 
 Report what was updated and what was already current:
 

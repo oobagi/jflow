@@ -173,6 +173,8 @@ Build an inventory of **declared tokens** (from DESIGN.md / token files) and **u
 
 ## 2. Run audit agents in parallel
 
+Launch all four agents **in parallel** (single message, multiple Agent tool calls):
+
 ### Technical Artist (`subagent_type: "Technical Artist"`)
 
 Tell it to audit visual consistency (scoped to UI, NOT game pipelines):
@@ -190,6 +192,25 @@ Tell it to audit structural consistency:
 - **Naming consistency:** Do token names follow the convention defined in DESIGN.md?
 - **Missing states:** Do components handle loading, error, empty, and success states?
 - **Token coverage:** Are there token categories in DESIGN.md that aren't actually used in code, or vice versa?
+
+### Accessibility Auditor (`subagent_type: "Accessibility Auditor"`)
+
+Tell it to perform a comprehensive accessibility audit of the UI, focusing on areas the Technical Artist does **not** cover. The Technical Artist already handles contrast ratios — do not duplicate that work. This agent should focus on:
+
+- **Focus management:** Verify keyboard navigation, focus traps in modals, skip links
+- **Screen reader:** Check ARIA labels, roles, live regions, and semantic HTML
+- **Motion:** Check for `prefers-reduced-motion` support, animation durations, auto-playing content
+- **Color reliance:** Flag anywhere color is the sole indicator of state (errors, status, selections)
+- **Touch targets:** Minimum tap/click target sizes for interactive elements
+
+### UX Researcher (`subagent_type: "UX Researcher"`)
+
+Tell it to evaluate the design from a user research perspective:
+
+- **Usability heuristics:** Apply Nielsen's heuristics to the component inventory and layout patterns
+- **Cognitive load:** Flag areas with too many choices, unclear hierarchy, or information overload
+- **Consistency:** Check for inconsistent interaction patterns across components
+- **Learnability:** Assess how intuitive the design patterns are for new users
 
 ## 3. Report findings
 

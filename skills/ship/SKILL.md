@@ -56,16 +56,19 @@ The PR body should include:
 - `## Test plan` with a checklist of how it was verified
 - Footer: `🤖 Generated with [Claude Code](https://claude.com/claude-code)`
 
-## 5. Merge and cleanup
+## 5. Wait for CI, then merge
 
-Try to merge the PR with `gh pr merge <number> --merge`.
+**Always wait for CI checks to pass before merging** — even if the repo has no branch protection.
 
-If branch protection blocks the merge, queue auto-merge with `gh pr merge <number> --auto --merge`, then wait for CI:
+1. Poll with `gh pr view <number> --json statusCheckRollup` every 15 seconds.
+2. If no checks are registered after 30 seconds, skip the wait — the repo may not have CI configured.
+3. If all checks pass, proceed to merge.
+4. If any check fails, report the failure and stop — do not retry or bypass.
+5. If 5 minutes elapse without all checks completing, report the current status and stop.
 
-1. Poll with `gh pr view <number> --json state,statusCheckRollup` every 15 seconds (max 5 minutes).
-2. If all checks pass and the PR merges, continue to cleanup.
-3. If checks fail, report the failure and stop — do not retry or bypass.
-4. If 5 minutes elapse without resolution, report the current status and stop.
+Once checks pass (or no CI exists), merge the PR with `gh pr merge <number> --merge`.
+
+If branch protection blocks the merge (e.g. checks passed but another rule blocks), queue auto-merge with `gh pr merge <number> --auto --merge` and continue polling `gh pr view <number> --json state` until the PR merges or 5 minutes total have elapsed.
 
 If in a worktree, use `ExitWorktree` to return to the main working directory.
 

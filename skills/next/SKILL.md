@@ -30,11 +30,20 @@ List a few open issues that are **NOT in the roadmap** — these are standalone 
 
 ## 3. Implement in a worktree
 
-Work strictly in a worktree (use `isolation: "worktree"` when spawning the implementation agent). The agent should:
+Work strictly in a worktree (use `isolation: "worktree"` when spawning the implementation agent).
+
+**Choose the right agent based on the work:**
+
+- If the issue primarily involves **UI/frontend** files (React, Vue, Svelte, SwiftUI, CSS, HTML): use `subagent_type: "Frontend Developer"`
+- If the issue primarily involves **backend/API/infrastructure** (routes, database, services, DevOps): use `subagent_type: "Backend Architect"`
+- If the issue involves **architecture or design decisions** (new modules, major refactors, system boundaries): use `subagent_type: "Software Architect"`
+- If the issue is a **mix or unclear**: use a general-purpose agent
+
+The agent should:
 
 - Read the issue spec and all likely files listed
 - Implement the feature or fix
-- Run `anyzork lint` and fix any issues
+- Run lint and fix any issues
 - Run any relevant tests
 - Report back with a summary of changes
 
