@@ -2,7 +2,7 @@
 name: autopilot
 description: >
   Fully automated development loop — iterates through ROADMAP.md items one at a time,
-  running /next → /test → /ship for each. Runs /checkup at phase boundaries.
+  running /next → /test → /harden → /ship for each. Runs /checkup and /simplify at phase boundaries.
   Use "interactive" to confirm before each item. Use "phase-N" to start at a specific phase.
 user_invocable: true
 argument-hint: >
@@ -13,7 +13,7 @@ effort: high
 
 # Autopilot
 
-Fully automated development loop. Reads ROADMAP.md and works through every uncompleted item in order: `/next` → `/test` → `/ship`, with `/checkup` at phase boundaries.
+Fully automated development loop. Reads ROADMAP.md and works through every uncompleted item in order: `/next` → `/test` → `/harden` → `/ship`, with `/checkup` and `/simplify` at phase boundaries.
 
 ## 0. Parse arguments
 
@@ -95,7 +95,22 @@ If `/test` finds unfixable blockers:
 - Report the blockers.
 - Tell the user to fix them manually, then run `/ship` followed by `/autopilot` to resume.
 
-### 3d. Run `/ship`
+### 3d. Run `/harden fix`
+
+Invoke the `harden` skill in fix mode, scoped to the files changed by `/next`. This:
+- Audits changed files for error handling gaps, missing logging, validation issues, and boundary protection
+- Implements critical and high severity fixes automatically
+- Defers medium/low issues
+- Runs lint and tests to verify fixes don't regress
+
+If `/harden` introduces regressions it can't resolve:
+- **Stop the loop.**
+- Report which fixes caused the issue.
+- Tell the user to review manually, then run `/ship` followed by `/autopilot` to resume.
+
+If `/harden` finds no issues, it reports clean and moves on immediately.
+
+### 3e. Run `/ship`
 
 Invoke the `ship` skill. This:
 - Creates a branch, commits, opens a PR
@@ -107,23 +122,24 @@ If `/ship` fails (e.g., CI fails, merge blocked):
 - Report the failure and the PR URL.
 - Tell the user to resolve it, then re-run `/autopilot` to continue.
 
-### 3e. Mark progress
+### 3f. Mark progress
 
 Update the task for this item to `completed`. Log:
 - Issue number and title
 - PR URL (from `/ship` output)
 - Time taken (if trackable)
 
-### 3f. Phase boundary check
+### 3g. Phase boundary check
 
 After completing an item, check: **is this the last item in the current phase?**
 
 If yes:
-- Announce: `Phase N complete. Running health checkup...`
-- Invoke the `checkup` skill with `now` (auto-clean without confirmation).
-- Report checkup results before continuing to the next phase.
+1. Announce: `Phase N complete. Running simplify + checkup...`
+2. Invoke the `simplify` skill (no arguments — it auto-scopes to changes since last simplify). This cleans up DRY violations, dead code, and complex logic accumulated during the phase. If simplify produces changes, ship them with `/ship` using commit message `simplify: phase N cleanup`.
+3. Invoke the `checkup` skill with `now` (auto-clean without confirmation).
+4. Report simplify and checkup results before continuing to the next phase.
 
-Also run `/checkup now` if:
+Also run `/checkup now` (without `/simplify`) if:
 - 5+ items have been shipped since the last checkup (even mid-phase)
 - The autopilot run is ending (final item completed)
 
@@ -144,6 +160,10 @@ When the loop finishes (all items done, or user stopped it), print a full summar
     • #14 — feat: add WASD controls (Closes #3)
     • #15 — feat: implement save system (Closes #4)
     • ...
+
+  Simplify passes: 2
+    • Phase 1 — 3 helpers created, 12 dead items removed, 5 logic simplifications
+    • Phase 2 — 1 helper created, 8 dead items removed, 3 logic simplifications
 
   Checkups run: 2
     • Phase 1 boundary — clean

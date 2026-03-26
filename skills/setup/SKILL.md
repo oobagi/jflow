@@ -15,28 +15,37 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion
 
 Scaffold a new project from scratch. Gather requirements conversationally, then create everything in one shot — including full CI/CD automation.
 
-## 1. Gather project info
+## 1. Gather project info — batch intake
 
-If `$ARGUMENTS` is empty, ask the user:
+Start with a single, comprehensive intake question. This avoids slow back-and-forth and lets the user think holistically about their project upfront.
 
-> What's the project? Give me a name, a one-liner on what it does, and any tech/language preferences.
+### 1a. First question — the essentials
 
-If `$ARGUMENTS` has content, parse it for as much info as possible (name, description, tech stack, goals).
+If `$ARGUMENTS` is empty or sparse, present **all** of these questions in one `AskUserQuestion` call. Format them as a numbered list so the user can answer inline:
 
-Either way, use `AskUserQuestion` to fill in any gaps. Ask all unknowns in a **single** multi-part question to avoid back-and-forth. The fields you need:
+> **Let's set up your project.** Answer as many of these as you can — skip any you're unsure about and I'll use sensible defaults.
+>
+> 1. **Project name** — what should the repo be called? (kebab-case, e.g. `my-cool-app`)
+> 2. **What does it do?** — one sentence tagline
+> 3. **Tech stack** — language, framework, major libraries (e.g. "Rust CLI", "Next.js + Postgres", "Python FastAPI")
+> 4. **Key features or goals** — what should it do when it's done? (bullet points are fine)
+> 5. **External services** — any APIs, databases, auth providers, or third-party services it needs? (e.g. Stripe, Supabase, OpenAI, Redis)
+> 6. **Target platform** — where does it run? (e.g. web, iOS, CLI, server, desktop, embedded)
+> 7. **Repo visibility** — public or private? (default: private)
+> 8. **License** — MIT, Apache-2.0, or something else? (default: MIT)
 
-| Field | Required | Default |
-|---|---|---|
-| **Project name** (kebab-case, used for dir + repo) | Yes | — |
-| **Tagline** (one sentence, used in README header) | Yes | — |
-| **Tech stack / language** | Yes | — |
-| **Key features or goals** (seeds README body + ROADMAP) | No | — |
-| **Repo visibility** | No | `private` |
-| **License** | No | `MIT` |
+If `$ARGUMENTS` already contains rich context, parse it for as many of these fields as possible and **only ask about the remaining gaps** — but still ask them all in a single question.
 
-Only ask about fields you genuinely can't infer from the context. If the user said "a Rust CLI for X", you already know the language — don't ask again.
+### 1b. Follow-up — defining questions
 
-If the license is non-obvious for the project type (e.g., a library that might want Apache-2.0, or a game that might want a custom license), briefly ask. Otherwise default to MIT silently.
+After the user answers the essentials, review their answers and improv 1-3 follow-up questions **only if needed** to resolve ambiguities or make critical decisions. Examples of when follow-ups are warranted:
+
+- They said "web app" but didn't mention auth — ask if they need authentication and what kind
+- They mentioned a database but not which one — ask their preference
+- The features suggest a complex architecture — ask about their preferred patterns (monorepo vs multi-repo, monolith vs microservices, etc.)
+- They mentioned an API — ask if it's REST, GraphQL, or gRPC
+
+If the answers from 1a are clear and complete, **skip follow-ups entirely** and proceed to step 2. Don't ask questions just to ask questions.
 
 ## 2. Create project directory
 
@@ -133,15 +142,16 @@ Generate the full license text. Default to MIT with the current year and the use
 
 ### .gitignore
 
-Generate a `.gitignore` appropriate for the tech stack. If the stack isn't clear, create a minimal one:
+Generate a `.gitignore` appropriate for the tech stack. Always include `todo.txt` (used by /setup for user action items). If the stack isn't clear, create a minimal one:
 
 ```
 .DS_Store
 .env
 *.log
+todo.txt
 ```
 
-For known stacks, include the standard ignores (e.g., `node_modules/`, `target/`, `__pycache__/`, `.venv/`, `build/`, etc.).
+For known stacks, include the standard ignores (e.g., `node_modules/`, `target/`, `__pycache__/`, `.venv/`, `build/`, etc.) plus `todo.txt`.
 
 ### docs/
 
@@ -552,7 +562,36 @@ Adapt the `contexts` array to match the actual job name(s) in `ci.yml`. If the C
 
 **Note:** Branch protection requires the repo to be on a GitHub plan that supports it (Pro, Team, or Enterprise for private repos; free for public repos). If the API call fails because of plan limitations, warn the user and skip — don't block the rest of setup.
 
-### 5d. Commit and push automation updates
+### 5d. Set up ROADMAP_PAT secret
+
+The roadmap-sync workflow needs a `ROADMAP_PAT` secret (a GitHub PAT with `repo` scope) to create PRs when issues are closed/reopened.
+
+Check if it's already set:
+
+```bash
+gh secret list --repo <user>/<repo> | grep ROADMAP_PAT
+```
+
+- **If it exists:** skip — the user already has one from a previous `/setup`.
+- **If it doesn't exist:** ask the user with `AskUserQuestion`:
+
+> **Roadmap auto-sync needs a GitHub token.** If you've already created one for another repo, you can reuse it. Otherwise:
+>
+> 1. Go to https://github.com/settings/tokens → **Generate new token (classic)**
+> 2. Give it a name like `roadmap-sync`, select the `repo` scope, and set a long expiration
+> 3. Copy the token
+>
+> Paste your token here (it will be stored as a repo secret, not logged):
+
+Then set it:
+
+```bash
+echo "<pasted-token>" | gh secret set ROADMAP_PAT --repo <user>/<repo>
+```
+
+If the user declines or wants to do it later, that's fine — it'll be in `todo.txt`.
+
+### 5e. Commit and push automation updates
 
 ```bash
 git add ROADMAP.md
@@ -618,7 +657,54 @@ If there are questions, ask the user with `AskUserQuestion` and adjust based on 
 
 If no blockers or suggestions — skip straight to the summary.
 
-## 7. Summary
+## 7. Generate todo.txt
+
+Create a `todo.txt` in the project root with all the manual steps the user needs to complete to get fully operational. This file is **untracked** (already in `.gitignore`) — it's a personal checklist, not project documentation.
+
+Build the list dynamically based on what the project actually needs. Only include items that weren't already completed during setup.
+
+```
+# TODO — manual setup steps for <project-name>
+# This file is untracked (.gitignore) — it's your personal checklist.
+# Delete it when you're done.
+
+## Required
+
+- [ ] Drop a project icon at assets/<project-name>-icon.png (referenced in README)
+
+## Project-specific
+
+<dynamically generated based on the project — examples below>
+```
+
+**Note:** Only include the ROADMAP_PAT item if the user skipped it during step 5d:
+```
+- [ ] Create ROADMAP_PAT secret for roadmap auto-sync:
+      1. Go to https://github.com/settings/tokens → Generate new token (classic) with repo scope
+      2. Run: echo "<your-token>" | gh secret set ROADMAP_PAT --repo <user>/<repo>
+      Tip: one token works across all your repos — reuse it for future /setup runs.
+```
+
+**Examples of project-specific items** (include only what's relevant):
+
+- `- [ ] Create Stripe API keys and set STRIPE_SECRET_KEY in .env` — if they mentioned Stripe
+- `- [ ] Set up Supabase project and add SUPABASE_URL + SUPABASE_ANON_KEY to .env` — if they mentioned Supabase
+- `- [ ] Create OpenAI API key and set OPENAI_API_KEY in .env` — if they mentioned OpenAI/LLM
+- `- [ ] Set up database: create Postgres instance and add DATABASE_URL to .env` — if they mentioned a database
+- `- [ ] Register OAuth app and configure client ID/secret` — if they mentioned auth
+- `- [ ] Set up DNS and configure custom domain` — if they mentioned deployment
+- `- [ ] Create Apple Developer account for App Store distribution` — if it's an iOS app
+- `- [ ] Install system dependencies: <list>` — if the stack requires system-level installs
+
+End the file with:
+
+```
+## Get started
+
+- [ ] Run /next to start working through the roadmap
+```
+
+## 8. Summary
 
 After everything is created, show the user:
 
@@ -629,18 +715,6 @@ After everything is created, show the user:
   - CI workflow (what it runs)
   - Roadmap sync (auto-checkbox updates)
   - Branch protection (enabled or skipped)
-- **ROADMAP_PAT setup**: The roadmap-sync workflow requires a `ROADMAP_PAT` repository secret — a GitHub Personal Access Token with `repo` scope. Tell the user:
-
-  > **Action needed:** Create a `ROADMAP_PAT` secret for roadmap auto-sync.
-  >
-  > 1. Go to https://github.com/settings/tokens and create a fine-grained token with **Contents** and **Pull requests** read+write access for this repo
-  > 2. Set it from the terminal:
-  >    ```
-  >    echo "<your-token>" | gh secret set ROADMAP_PAT --repo <user>/<repo>
-  >    ```
-  >    Or add it manually at the repo's **Settings > Secrets and variables > Actions**.
-  >
-  > Without this, the roadmap-sync workflow won't be able to create PRs or push changes.
-
+- **todo.txt** — remind the user: `Check todo.txt in the project root for manual setup steps (API keys, secrets, etc.)`
 - Architecture review results (if step 6 ran): blockers fixed, suggestions applied, questions resolved
-- Next steps (e.g., "Drop an icon at `assets/<project-name>-icon.png`", "Run `/next` to start working through the roadmap")
+- Next steps (e.g., "Work through `todo.txt`", "Run `/next` to start building")
