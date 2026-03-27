@@ -31,7 +31,7 @@ Invoked via `/skill-name`. Orchestrate agents, manage branches, ship code.
 | `/design` | Design system creation or audit (colors, typography, components) |
 | `/scrape-design` | Playwright-based website design extraction |
 | `/sitrep` | Branch health, stale worktrees, uncommitted work, recent activity |
-| `/qa` | Manual testing guide or automated test execution via Playwright/CLI/API. `auto` to run (remote if `QA_REMOTE_HOST` set), `latest` for last featureset |
+| `/qa` | Walk through testing every feature, or `auto` to do it all with screenshots. `latest` for last featureset |
 | `/checkup` | Git hygiene — prune remotes, remove stale branches/worktrees, gc |
 | `/upgrade-jstack` | Pull latest jstack, re-run installer |
 
