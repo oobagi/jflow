@@ -1,0 +1,9 @@
+*.bak
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+*.p12
+credentials.json
+.playwright-mcp/
