@@ -88,3 +88,18 @@ If no blockers, skip to step 6.
 If fixes were applied in step 5, tell the user to run `/test` again to re-validate.
 
 If no blockers were found (or only suggestions remain), tell the user to `/ship` when ready.
+
+### Recommend `/qa` when it adds value
+
+**Skip this section entirely if you are running inside a pipeline** (e.g., invoked by `/autopilot` or `/polish`) — those flows manage their own next steps.
+
+Based on the changed files you identified in step 1, recommend `/qa auto` **only** when the changes include user-facing behavior that the review agents couldn't verify by reading code alone. Include a one-line reason tied to the specific changes. Skip this recommendation entirely for internal refactors, config, docs, or CI changes.
+
+Examples of good recommendations:
+
+- UI files changed (`.tsx`, `.jsx`, `.vue`, `.svelte`, HTML) → "The review agents checked your component code but couldn't click through the actual UI — run `/qa auto` to verify the flows work end-to-end in a browser."
+- API routes/handlers changed → "Contract and security reviews passed, but the endpoints weren't exercised with real requests — run `/qa auto` to hit them live and validate status codes and response shapes."
+- CLI entrypoints changed → "The CLI logic looks correct, but it wasn't run with real inputs — run `/qa auto` to execute the commands and verify output."
+- Multiple user-facing areas changed → "This touches both UI and API — run `/qa auto` to exercise the full stack before shipping."
+
+Do not recommend `/qa` for changes that are purely internal (utility functions, type definitions, tests, build config, documentation).
