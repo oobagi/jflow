@@ -213,7 +213,18 @@ Also run `/checkup now` (without `/docs` or `/simplify`) if:
 - 5+ items have been shipped since the last checkup (even mid-phase)
 - The autopilot run is ending (final item completed)
 
-## 4. Summary
+## 4. Final smoke test (`/qa auto`)
+
+After the loop completes successfully (all items shipped, not stopped early by error or user), run `/qa auto` as a final end-to-end smoke test of everything that was just built.
+
+- Invoke via the Skill tool: `skill: "qa", args: "auto"`
+- This exercises the shipped features with real interactions (Playwright for UI, curl for APIs, shell for CLI) — catching integration issues that per-item `/test` reviews can't see, since each `/test` only reviewed code in isolation.
+- Include the `/qa auto` results (pass/fail counts, any failures) in the summary below.
+- If `/qa auto` finds failures, report them in the summary but do **not** stop or revert — the code is already shipped. The user can follow up.
+
+Skip this step if the loop was stopped early (user chose "stop" in interactive mode, or an error halted the run) — a partial run doesn't warrant a full smoke test.
+
+## 5. Summary
 
 When the loop finishes (all items done, or user stopped it), print a full summary:
 
@@ -245,6 +256,10 @@ When the loop finishes (all items done, or user stopped it), print a full summar
     • Phase 1 boundary — clean
     • Phase 2 boundary — removed 3 stale branches
 
+  Smoke test (/qa auto):
+    Total: 12 | Passed: 11 | Failed: 1 | Skipped: 0
+    • FAIL: API-03 — POST /saves returns 500 when slot is full (expected 409)
+
   Remaining:
     • Phase 3: 4 items
     • Phase 4: 1 item
@@ -253,7 +268,7 @@ When the loop finishes (all items done, or user stopped it), print a full summar
 ═══════════════════════════════════════
 ```
 
-## Error recovery
+## 6. Error recovery
 
 The autopilot is designed to **stop on first failure** rather than skip and continue. This is intentional — later roadmap items may depend on earlier ones, so skipping a failure is risky.
 
