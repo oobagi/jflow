@@ -37,6 +37,7 @@ Examples: `/qa`, `/qa latest`, `/qa auto`, `/qa auto latest`
 - **Package manifest** — read `package.json`, `Cargo.toml`, `pyproject.toml`, `go.mod`, or equivalent to understand dependencies, available scripts, and entry points.
 - **Source structure** — use Glob to map the top-level directory tree (2 levels deep). Identify key directories (routes, components, services, models, CLI entrypoints, etc.).
 - **Existing tests** — Glob for test files (`**/*test*`, `**/*spec*`, `**/tests/**`). Read a few to understand what's already covered and how tests are structured.
+- **CI/CD pipelines** — Check for `.github/workflows/*.yml`, `.gitlab-ci.yml`, `Jenkinsfile`, `Makefile` targets, or equivalent. Identify what tests and checks run automatically on push/PR (linting, unit tests, integration tests, type checking, build verification). These are your "already automated" baseline.
 - **ROADMAP / CHANGELOG** — if present, read them to understand feature groupings and milestones.
 
 ### 1b. If scope is "latest"
@@ -67,10 +68,20 @@ For each feature, note:
 
 | Type | How to test |
 |------|-------------|
-| `cli` | Run a shell command, check exit code and stdout/stderr |
+| `cli` | Run an actual user-facing command, check output and behavior |
 | `api` | Send an HTTP request via `curl`, check status code and response body |
 | `ui` | Navigate with Playwright, interact with elements, verify visual state |
 | `db` | Run a query or check file/state after an action |
+
+**What QA is NOT:**
+- Do NOT use test runners as test steps (`pytest`, `jest`, `vitest`, `cargo test`, `go test`, `npm test`, `python -c`, etc.). Those are automated tests — they belong in CI, not a QA plan.
+- Do NOT duplicate anything already covered by CI pipelines or the automated test suite.
+- The automated test suite is a **baseline check** (run it once in setup to confirm green), not the QA plan itself.
+
+**What QA IS:**
+- Real user-facing actions: run the actual CLI command, hit the actual API endpoint, open the actual UI, check the actual output.
+- Things a human needs to verify that automation can't: UX flows, visual correctness, error messages making sense, config behaving as documented, edge cases in real usage.
+- Integration behavior between components that unit tests don't exercise.
 
 ## 3. Build the test plan
 
@@ -79,9 +90,9 @@ Structure the plan as a list of test cases grouped by feature. Each test case mu
 1. **ID** — short identifier (e.g., `AUTH-01`, `CLI-03`)
 2. **What to test** — one-line description
 3. **Type** — `cli`, `api`, `ui`, or `db`
-4. **Steps** — exact commands, URLs, or actions
-5. **Expected result** — what success looks like (exit codes, output patterns, UI state)
-6. **Edge cases** — variations to try
+4. **Steps** — exact user-facing commands, URLs, or actions (never test-runner commands)
+5. **Expected result** — what success looks like (specific output, status codes, visible behavior)
+6. **Edge cases** — variations to try that automated tests don't cover
 
 Prioritize by risk: most critical and most likely-to-break first.
 
@@ -106,8 +117,11 @@ Write the full test plan to the user as formatted output, following these rules:
 - Numbered test cases with steps, expected results, and edge cases
 - Code blocks for every command or expected output
 
+### Already Automated (skip these)
+- List what CI and the test suite already cover, so the user knows they don't need to manually verify those
+
 ### Automated Test Gaps
-- Brief list of features with no automated coverage
+- Features with no automated coverage that the manual QA plan above exercises
 
 ### Formatting
 - Write for a human at their terminal
@@ -126,6 +140,21 @@ Execute every test case from the plan yourself. You are now the tester.
 
 ### 5a. Environment setup
 
+Check if `QA_REMOTE_HOST` is set in the environment. This determines whether tests run locally or on a remote server.
+
+**If `QA_REMOTE_HOST` is set (remote execution):**
+
+1. Determine the project's dev server command (from package.json scripts, README, or convention).
+2. Compute the remote workspace path: `/home/claude/qa-workspace/<project-directory-name>/`
+3. Sync the project to the remote server: `rsync -az --delete --exclude node_modules --exclude .git --exclude dist --exclude build --exclude .next --exclude __pycache__ --exclude .venv --exclude target ./ $QA_REMOTE_HOST:<remote-workspace-path>/`
+4. Install dependencies on the remote server: `ssh -o BatchMode=yes $QA_REMOTE_HOST "cd <remote-workspace-path> && npm install --prefer-offline"` (or equivalent for the project's package manager).
+5. Start the dev server remotely via Bash (`run_in_background: true`): `ssh -o BatchMode=yes $QA_REMOTE_HOST "cd <remote-workspace-path> && <dev-server-command>"`
+6. Health-check the remote dev server: `ssh -o BatchMode=yes $QA_REMOTE_HOST "curl -s -o /dev/null -w '%{http_code}' http://localhost:<port>"` — retry a few times if needed.
+7. Dev URL = `http://localhost:<port>` — both the dev server and the Playwright browser run on the same remote machine, so `localhost` works.
+8. For UI tests: Playwright MCP is configured to run remotely via SSH in settings.json. No additional setup needed — `mcp__playwright__*` tools will control the remote browser automatically.
+
+**If `QA_REMOTE_HOST` is NOT set (local execution — original behavior):**
+
 1. Determine the project's local dev server command (from package.json scripts, README, or convention — e.g., `npm run dev`, `cargo run`, `python manage.py runserver`).
 2. Start the dev server in the background via Bash (`run_in_background: true`). Wait a few seconds for it to be ready.
 3. Identify the local URL (typically `http://localhost:3000`, `http://localhost:8080`, etc. — check the dev server output or config).
@@ -133,15 +162,17 @@ Execute every test case from the plan yourself. You are now the tester.
 
 ### 5b. Execute test cases
 
+> **Remote execution rule:** When `QA_REMOTE_HOST` is set, wrap ALL Bash commands for CLI, API, and DB tests in: `ssh -o BatchMode=yes $QA_REMOTE_HOST "cd <remote-workspace-path> && <command>"`. UI tests need no wrapping — Playwright MCP already runs on the remote server via settings.json.
+
 Work through each test case in order. For each one:
 
 **CLI tests (`cli` type):**
-- Run the command via Bash
+- Run the command via Bash (remotely wrapped if `QA_REMOTE_HOST` is set)
 - Capture stdout, stderr, and exit code
 - Compare against expected result
 
 **API tests (`api` type):**
-- Run `curl` commands via Bash (use `-s -w "\n%{http_code}"` to capture status codes)
+- Run `curl` commands via Bash (use `-s -w "\n%{http_code}"` to capture status codes; remotely wrapped if `QA_REMOTE_HOST` is set)
 - Parse and validate response body and status code against expected result
 
 **UI tests (`ui` type):**
@@ -186,6 +217,12 @@ If the project has a UI:
 
 ### 5e. Cleanup
 
+**If `QA_REMOTE_HOST` is set (remote):**
+- Kill the remote dev server: `ssh -o BatchMode=yes $QA_REMOTE_HOST "pkill -f '<dev-server-command>'"` (use the actual command from 5a)
+- Close the Playwright browser via `mcp__playwright__browser_close`
+- Leave the remote workspace intact for faster reuse on subsequent runs
+
+**If `QA_REMOTE_HOST` is NOT set (local):**
 - Stop the dev server if you started one (kill the background process)
 - Close the Playwright browser via `mcp__playwright__browser_close`
 - Undo any test data or state changes if possible
