@@ -5,9 +5,11 @@ description: >
   Analyzes the codebase, docs, and git history to produce step-by-step instructions the user can
   follow to exercise every feature. Pass "latest" to scope to the last featureset. Pass "auto" to
   execute the tests autonomously using Playwright, CLI, and API calls — then report results.
+  When QA_REMOTE_HOST is set, all test execution (browser, CLI, API, dev server) runs on the
+  remote server over SSH, keeping the local machine free.
 user-invocable: true
 argument-hint: >
-  [latest — last featureset only | auto — execute tests autonomously | combine: "auto latest"]
+  [latest — last featureset only | auto — execute tests autonomously (remote if QA_REMOTE_HOST set) | combine: "auto latest"]
 allowed-tools: Bash, Read, Glob, Grep, Agent, mcp__playwright__browser_navigate, mcp__playwright__browser_snapshot, mcp__playwright__browser_click, mcp__playwright__browser_fill_form, mcp__playwright__browser_take_screenshot, mcp__playwright__browser_press_key, mcp__playwright__browser_select_option, mcp__playwright__browser_hover, mcp__playwright__browser_evaluate, mcp__playwright__browser_console_messages, mcp__playwright__browser_network_requests, mcp__playwright__browser_tabs, mcp__playwright__browser_navigate_back, mcp__playwright__browser_close, mcp__playwright__browser_resize, mcp__playwright__browser_wait_for, mcp__playwright__browser_install, mcp__playwright__browser_run_code, mcp__playwright__browser_drag, mcp__playwright__browser_handle_dialog, mcp__playwright__browser_file_upload
 effort: high
 ---
