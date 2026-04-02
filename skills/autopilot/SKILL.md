@@ -3,19 +3,19 @@ name: autopilot
 description: >
   Fully automated development loop — works through ROADMAP.md items, open GitHub issues, or both.
   Runs /next → /test → /ship for each. Runs /harden, /docs, /simplify, and /checkup at phase boundaries.
-  Auto-compacts context when usage exceeds threshold (default 35%). Use "interactive" to confirm before each item.
+  Use "interactive" to confirm before each item.
   Use "phase-N" to start at a specific phase. Use "dry-run" to preview without executing.
   Use "roadmap" or "issues" to limit source; default is both.
 user-invocable: true
 argument-hint: >
-  ["roadmap" | "issues" | "interactive" | "phase-N" | "dry-run" | "compact-N%" to set compact threshold (default 35%) | combine: "issues interactive compact-80%"]
+  ["roadmap" | "issues" | "interactive" | "phase-N" | "dry-run" | combine: "issues interactive"]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill, TaskCreate, TaskUpdate, TaskList
 effort: high
 ---
 
 # Autopilot
 
-Fully automated development loop. Works through ROADMAP.md items, open GitHub issues, or both, analyzing them to determine optimal execution order. Runs `/next` → `/test` → `/ship` for each work item, with `/harden`, `/docs`, `/simplify`, and `/checkup` at phase boundaries. Auto-compacts context to stay within window limits.
+Fully automated development loop. Works through ROADMAP.md items, open GitHub issues, or both, analyzing them to determine optimal execution order. Runs `/next` → `/test` → `/ship` for each work item, with `/harden`, `/docs`, `/simplify`, and `/checkup` at phase boundaries.
 
 ## Agent dispatch policy
 
@@ -43,10 +43,9 @@ Check `$ARGUMENTS` for:
 - **`interactive`** — pause and confirm before each item. By default, autopilot runs without stopping.
 - **`phase-N`** (e.g., `phase-2`) — start at that phase, skipping earlier phases. Only meaningful when roadmap items are included.
 - **`dry-run`** — preview the plan without executing anything (see step 1c).
-- **`compact-N%`** (e.g., `compact-80%`) — compact context when usage exceeds N%. Default: `35%`.
 - **An issue number** — start from that specific issue and continue forward.
 
-These can be combined: `issues interactive compact-80%` means "only issues, confirm before each item, compact at 80% context usage."
+These can be combined: `issues interactive` means "only issues, confirm before each item."
 
 ## 1. Gather work items
 
@@ -170,7 +169,7 @@ If `dry-run` was specified, print the full plan and stop. Do NOT execute anythin
     7. #59 — enhance: improve search highlighting [issue, enhancement]
 
   Auto-close summary: 3 issues will be closed by superseding features
-  Compact threshold: K% (compacts triggered as needed)
+
 
   Run without dry-run to execute:
     /autopilot
@@ -267,18 +266,7 @@ Update the task for this item to `completed`. Log:
 
 Track cumulative durations across items so the summary can report average time per item.
 
-### 3g. Auto-compact context
-
-After each item, check context usage. **Note:** `/context` and `/compact` are built-in Claude Code CLI commands, not jflow skills — do NOT invoke them via the Skill tool. Instead, check the context usage indicator in the conversation and use the `/compact` slash command directly when needed. If usage exceeds the compact threshold (default 35%):
-
-1. Run `/compact` (built-in CLI command) to compress conversation context
-2. After compact, briefly re-state the current position:
-
-> **Resuming autopilot.** Phase N, item M of total. Next: #X — Title
-
-This prevents context exhaustion on long runs. The threshold is configurable via `compact-N%` argument — lower values (25-35%) for aggressive compaction, higher values (60%+) to let context accumulate longer.
-
-### 3h. Phase boundary check
+### 3g. Phase boundary check
 
 After completing a **roadmap** item, check: **is this the last roadmap item in the current phase?**
 

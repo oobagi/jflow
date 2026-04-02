@@ -122,13 +122,15 @@ If `/test` finds unfixable blockers:
 
 Update task to completed. Record duration.
 
-### 3d. Ship (unless `no-ship`)
+### 3d. Ask to ship (unless `no-ship`)
 
-Record start time.
+After `/test` passes, **do not automatically invoke `/ship`.** Instead, ask the user:
 
-Invoke the `ship` skill. This handles branch creation, commit, PR, CI, and merge.
+> Ready to ship. Run `/ship` to branch, commit, PR, and merge?
 
-If `/ship` fails:
+Wait for the user's response. Only invoke `/ship` if the user confirms. If the user declines or wants to review first, stop the pipeline gracefully — this is not a failure.
+
+If the user confirms and `/ship` fails:
 - **Stop the pipeline.**
 - Report the failure and PR URL if one was created.
 - Tell the user to resolve it manually.
@@ -148,7 +150,7 @@ Print the final summary:
     ✓ Simplify    (Xm Ys) — N helpers, N dead items removed, N simplifications
     ✓ Harden      (Xm Ys) — N fixes applied, N deferred
     ✓ Test        (Xm Ys) — no blockers
-    ✓ Ship        (Xm Ys) — PR #N merged
+    ✓ Ship        (Xm Ys) — PR #N merged (after user confirmed)
 
   Total time: Xm Ys
   PR: <url>

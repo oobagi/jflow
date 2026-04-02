@@ -409,7 +409,6 @@ If the tech stack is clear, also generate the standard project files:
 | **Node/TypeScript** | `package.json`, `tsconfig.json` (if TS), `src/index.ts` or `src/index.js` |
 | **Swift** | `Package.swift`, `Sources/<Name>/<Name>.swift` |
 | **Go** | `go.mod`, `main.go` or `cmd/<name>/main.go` |
-
 Use sensible defaults. The user can always change them.
 
 ## 4. Create GitHub repo and push

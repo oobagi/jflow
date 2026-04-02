@@ -1,6 +1,6 @@
 ---
 name: next
-description: Pick up the next roadmap item (or a specific issue), work in a worktree. Use "parallel" to also suggest parallel issues.
+description: Pick up the next roadmap item (or a specific issue). Use "parallel" to suggest parallel issues and work in worktrees.
 user-invocable: true
 argument-hint: [issue number | "parallel" to also suggest parallel issues]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
@@ -9,7 +9,7 @@ effort: high
 
 # Next
 
-Work on the next open roadmap item (or a specific issue if provided). All implementation happens in a worktree.
+Work on the next open roadmap item (or a specific issue if provided). By default, works on a feature branch directly. Use "parallel" to work in worktrees instead.
 
 ## 1. Identify work
 
@@ -30,9 +30,12 @@ List a few open issues that are **NOT in the roadmap** — these are standalone 
 
 **STOP here.** Present the findings from steps 1-2 to the user and wait for their go-ahead before proceeding to implementation.
 
-## 3. Implement in a worktree
+## 3. Implement
 
-Work strictly in a worktree (use `isolation: "worktree"` when spawning the implementation agent).
+**Choose isolation mode based on workflow:**
+
+- **Default (serial):** Create a feature branch from main (`git checkout -b feat/issue-<N>-<slug>`) and work directly on it. No worktree needed.
+- **Parallel mode** (when `$ARGUMENTS` contains "parallel"): Use `isolation: "worktree"` when spawning the implementation agent, so multiple issues can run concurrently in separate worktrees.
 
 **Choose the right agent based on the work:**
 
@@ -53,7 +56,7 @@ The agent should:
 
 Once implementation is complete:
 
-1. Enter the worktree using `EnterWorktree` so `/test` and `/ship` run in context
+1. If a worktree was used (parallel mode), enter it using `EnterWorktree` so `/test` and `/ship` run in context.
 2. Present the result using the standard output format:
 
 ```
@@ -63,11 +66,10 @@ Once implementation is complete:
 
   Issue: #42 — <issue title>
   Branch: feat/issue-42-description
-  Worktree: <path>
 
   Done:
     ✓ Read issue spec
-    ✓ Implemented in worktree
+    ✓ Implemented
     ✓ Lint — clean
     ✓ Tests — passing
 
