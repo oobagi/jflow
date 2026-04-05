@@ -3,7 +3,7 @@ name: simplify
 description: >
   Deep codebase simplification — dispatches parallel agents to fix DRY violations,
   remove dead code, and simplify logic. Creates reusable helpers for repeated patterns.
-  Integrates into /autopilot at phase boundaries.
+  Integrates into /autopilot when the "thorough" flag is used.
 user-invocable: true
 argument-hint: >
   ["full" for entire codebase | "scope:src/api" to limit scope | "dry-only" | "dead-only" | "logic-only"]

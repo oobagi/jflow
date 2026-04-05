@@ -57,7 +57,23 @@ The agent should:
 Once implementation is complete:
 
 1. If a worktree was used (parallel mode), enter it using `EnterWorktree` so `/test` and `/ship` run in context.
-2. Present the result using the standard output format:
+2. **Assess complexity** to determine the recommended next step:
+
+**Recommend `/ship` directly when:**
+- The change is small (≤3 files modified, no new files)
+- It's a config change, docs update, dependency bump, or simple bug fix
+- No security-sensitive code was touched (auth, payments, crypto, API keys)
+- No new API endpoints or database changes
+- Lint and tests already passed during implementation
+
+**Recommend `/test` then `/ship` when:**
+- The change is medium-to-large (4+ files, new modules)
+- Security-sensitive code was touched
+- New API endpoints, database migrations, or auth logic
+- Complex business logic or state management
+- The implementation agent reported uncertainty about any part
+
+3. Present the result:
 
 ```
 ═══════════════════════════════════════
@@ -73,6 +89,8 @@ Once implementation is complete:
     ✓ Lint — clean
     ✓ Tests — passing
 
+  Next: /ship
+  (or)
   Next: /test to validate, then /ship
 
 ═══════════════════════════════════════
@@ -92,7 +110,7 @@ If implementation failed:
     ✗ Implementation — <reason>
 
   Fix: <what needs manual attention>
-  Resume: resolve the issue, then /test and /ship
+  Resume: resolve the issue, then /ship (or /test then /ship)
 
 ═══════════════════════════════════════
 ```

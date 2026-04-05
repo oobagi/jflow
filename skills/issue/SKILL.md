@@ -1,201 +1,171 @@
 ---
 name: issue
 description: >
-  Turn a rough idea or complaint into a single well-scoped GitHub issue with context, solution avenues,
-  task list, and test plan. For multi-issue feature planning, use /feature instead.
+  Turn a rough idea into GitHub issues. Auto-scales: small requests get one lean issue,
+  big requests get a multi-issue breakdown. Replaces both /issue and /feature.
 user-invocable: true
 argument-hint: >
-  [describe the problem or feature in plain language, e.g. "the login button doesn't work on mobile" | "add a /health endpoint"]
-allowed-tools: Bash, Read, Glob, Grep, Agent, AskUserQuestion, TaskCreate, TaskUpdate
+  [describe the problem or feature, e.g. "fix the login bug" | "add dark mode" | "build a notification system"]
+allowed-tools: Bash, Read, Glob, Grep, Agent, AskUserQuestion, Write, Edit, Skill, TaskCreate, TaskUpdate
 effort: high
 ---
 
 # Issue
 
-Turn a rough, informal description into a single, well-structured GitHub issue. The user describes a bug, enhancement, chore, or small feature in whatever words they want — this skill investigates the codebase, fills in technical context, and creates one detailed issue ready for implementation.
+Turn a rough description into GitHub issues. This skill auto-scales based on what the user asks for — a one-line bug gets a lean issue, a multi-part feature gets a phased breakdown.
 
-**Scope guard:** This skill produces exactly one issue. If the user's description implies multiple features, a phased rollout, or architectural planning, tell them:
+## 0. Parse and classify
 
-> This sounds like it needs multi-issue planning. Use `/feature` instead — it'll break this down into phased issues with a roadmap.
+`$ARGUMENTS` contains the user's description. Read it and classify the **scale**:
 
-Then stop. Do not attempt to create multiple issues or break work into sub-issues — that's `/feature`'s job.
+- **Small** — isolated bug fix, config change, single endpoint, typo, chore. One file or function. → **One lean issue** (step 2a)
+- **Medium** — a self-contained feature or enhancement that touches a few files but is still one unit of work. → **One standard issue** (step 2b)
+- **Large** — spans multiple modules, needs phased work, or the user explicitly lists multiple features. → **Multi-issue breakdown** (step 2c)
 
-## 0. Parse the description
+**How to decide:** If you can describe the work in one sentence and it touches ≤3 files, it's small. If it's one feature but needs design decisions, it's medium. If the user says "and" between distinct features or the work has clear phases/dependencies, it's large.
 
-`$ARGUMENTS` contains the user's raw description. It might be:
+When in doubt, go smaller. A lean issue is always better than an over-scoped one.
 
-- A bug report: "the button doesn't work", "login is broken on mobile"
-- A feature request: "add dark mode", "we need rate limiting"
-- A vague complaint: "the dashboard is slow"
-- A detailed spec: "add a /health endpoint that returns 200 with uptime"
+## 1. Investigate
 
-Accept whatever they give you. Your job is to turn it into something actionable.
+Before writing anything, understand the relevant code:
 
-## 1. Investigate the codebase
+1. **Find the area** — use `Grep` and `Glob` to locate relevant files.
+2. **Read the code** — understand current behavior, patterns, conventions.
+3. **Check for duplicates** — `gh issue list --state open --search "<keywords>"`. If a duplicate exists, tell the user.
 
-Before writing the issue, understand the relevant code. This makes the issue actually useful — not just a restated complaint.
+For **small** issues, this can be 2-3 quick searches. For **large** issues, spawn an **Explore agent** for a thorough scan.
 
-1. **Identify the area** — based on the description, figure out which part of the codebase is involved. Use `Grep` and `Glob` to find relevant files. For bugs, trace the likely code path. For features, find where the new code would live.
+## 2a. Small issue (lean format)
 
-2. **Read the relevant code** — read the files you found. Understand the current behavior, data flow, and any existing patterns that are relevant.
-
-3. **Check for related issues** — run `gh issue list --state open --search "<keywords>"` to see if a similar issue already exists. If one does, tell the user and ask if they want to update the existing issue or create a new one.
-
-4. **Check recent commits** — run `git log --oneline -20` to see if someone has been working in this area recently. Note any relevant context.
-
-Spawn an **Explore agent** if the investigation requires searching across many files or the codebase is large. For simple, localized issues, direct Grep/Glob/Read is fine.
-
-## 2. Scope with Product Manager
-
-Launch a **Product Manager** agent (`subagent_type: "Product Manager"`) with the user's raw description and your investigation findings from step 1. Tell it to:
-
-- Assess the issue's priority and impact from a product perspective
-- Identify any user-facing implications or dependencies
-- Suggest acceptance criteria that focus on user outcomes, not just technical correctness
-- Flag if this is too large for a single issue (suggest `/feature` instead)
-
-Merge its input into the issue draft in step 3 — particularly the acceptance criteria and scope assessment.
-
-## 3. Determine issue type and scope
-
-Based on the investigation, classify the issue:
-
-- **Bug** — something is broken or behaving incorrectly
-- **Feature** — new functionality that doesn't exist yet
-- **Enhancement** — improvement to existing functionality
-- **Chore** — refactoring, dependency updates, CI changes, etc.
-
-Assess the scope:
-
-- **Small** — isolated change, single file or function, < 1 hour of work
-- **Medium** — touches a few files, may need tests, < half a day
-- **Large** — spans multiple modules, needs design decisions
-
-If the scope is **large**, suggest the user run `/feature` instead for proper multi-issue planning. If they insist on a single issue, proceed — but keep it to one issue.
-
-## 4. Draft the issue
-
-Structure the issue with these sections:
+Create a single issue with minimal ceremony:
 
 ### Title
-
-Short, specific, and prefixed with the type:
-
-- `fix: login button unresponsive on mobile Safari`
-- `feat: add dark mode toggle to settings`
-- `enhance: improve dashboard query performance`
-- `chore: migrate from Jest to Vitest`
+Short, prefixed: `fix: ...`, `feat: ...`, `enhance: ...`, `chore: ...`
 
 ### Body
 
-Use this template:
+```markdown
+## Problem
+[1-2 sentences. What's wrong or what's needed.]
+
+## Context
+[Which file(s) and why. Link to the specific code.]
+
+## Tasks
+- [ ] [Concrete step]
+- [ ] [Another step if needed]
+```
+
+That's it. No approaches section, no test plan, no scope metadata. Keep it tight.
+
+## 2b. Medium issue (standard format)
+
+One issue with enough context for implementation:
+
+### Title
+Same prefix convention.
+
+### Body
 
 ```markdown
 ## Problem
-
-[What's wrong or what's missing. Be specific — include the user's original complaint
-but add technical context from your investigation. For bugs, describe the current
-behavior vs expected behavior.]
+[What's wrong or missing. Include technical context from investigation.]
 
 ## Context
+[Relevant code paths, files, patterns. Be specific with paths and line references.]
 
-[Relevant code paths, files, and architectural context discovered during investigation.
-Link to specific files/lines where the issue lives or where changes would go.
-Mention any related patterns or conventions in the codebase.]
-
-## Possible approaches
-
-[2-3 solution avenues with brief trade-offs. Don't prescribe one — give the implementer
-options to consider.]
-
-### Approach A: [name]
-- How: [brief description]
-- Pros: [why this is good]
-- Cons: [downsides or risks]
-- Files likely touched: [list]
-
-### Approach B: [name]
-- How: [brief description]
-- Pros: [why this is good]
-- Cons: [downsides or risks]
-- Files likely touched: [list]
+## Approach
+[One recommended approach. Brief — what to do and which files to touch.
+Only include alternatives if there's a genuine trade-off worth discussing.]
 
 ## Tasks
-
 - [ ] [Concrete implementation step]
 - [ ] [Another step]
-- [ ] [Update/add tests for ...]
-- [ ] [Update docs if needed]
+- [ ] [Tests if the change warrants them]
 
-## Test plan
-
-- [ ] [Specific test case or scenario to verify]
-- [ ] [Edge case to cover]
-- [ ] [Regression to check — existing behavior that must not break]
-
-## Scope
-
-**Type:** bug | feature | enhancement | chore
-**Size:** small | medium | large
+## Acceptance criteria
+- [ ] [Specific verifiable outcome]
+- [ ] [Another if needed]
 ```
 
-### Labels
+## 2c. Large issue (multi-issue breakdown)
 
-Determine appropriate labels based on what the repo already uses. Run `gh label list` to see available labels. Pick the most relevant ones (type, area, priority). Don't invent labels that don't exist.
+For work that needs multiple issues, break it down:
 
-## 5. Create the issue
+1. **Analyze the repo** — spawn an **Explore agent** (`thoroughness: "very thorough"`) to understand architecture, conventions, and patterns. Focus on: directory layout, how similar features are structured, testing patterns, and recent commit style.
 
-Present the draft to the user before creating:
+2. **Break down the work** — split into concrete, implementable issues. Each issue should be independently shippable. Order by dependency.
+
+3. **Present the plan** before creating anything:
 
 ```
 ═══════════════════════════════════════
-  Issue Draft
+  Issue — Plan
 ═══════════════════════════════════════
 
-  Title: fix: login button unresponsive on mobile Safari
-  Labels: bug, frontend, P1
+  Breakdown: N issues
 
-  [full body preview]
+  1. <title> [small/medium] — one-line description
+  2. <title> [small/medium] — one-line description
+  3. ...
+
+  Dependencies: #1 → #2 (if any)
 
 ═══════════════════════════════════════
-  Create this issue? (or suggest changes)
+  Create these issues? (or adjust)
 ═══════════════════════════════════════
 ```
 
-Wait for the user to confirm or request changes. Once confirmed:
+Wait for confirmation. Then create each issue using the **small** or **medium** format above (match to scope of each individual issue). Cross-reference dependencies in issue bodies.
 
-```bash
-gh issue create --title "Title here" --body "$(cat <<'EOF'
-Body here
-EOF
-)" --label "bug,frontend"
-```
+4. **Update ROADMAP.md** if it exists — append the new issues following the existing format. If it doesn't exist and there are 3+ issues, create one.
 
-Only one issue should be created per invocation.
+5. **Commit and push** the roadmap change.
 
-## 6. Confirm
+## 3. Create the issue(s)
 
-Report the created issue:
+For **small** and **medium**: show a brief draft preview, then create with `gh issue create`. Apply labels from `gh label list` — don't invent labels.
+
+For **large**: create after the user confirms the plan (step 2c).
+
+## 4. Confirm
 
 ```
 ═══════════════════════════════════════
-  Issue Created
+  Issue — Created
 ═══════════════════════════════════════
 
   #42 — fix: login button unresponsive on mobile Safari
   URL: https://github.com/owner/repo/issues/42
-  Labels: bug, frontend, P1
 
   Pick it up with: /next 42
+
+═══════════════════════════════════════
+```
+
+For multi-issue:
+
+```
+═══════════════════════════════════════
+  Issues — Created
+═══════════════════════════════════════
+
+  Created N issues:
+    • #42 — feat: notification model + storage
+    • #43 — feat: notification triggers
+    • #44 — feat: notification UI
+
+  Roadmap updated.
+  Start with: /next 42
+
 ═══════════════════════════════════════
 ```
 
 ## Style guidelines
 
 - Follow the standard output format in `_output-format.md`
-- Write issues for the implementer, not the reporter. The person fixing this should be able to start working immediately from the issue alone.
-- Be specific about file paths and code references — vague issues waste time.
-- Keep the tone neutral and technical. Don't editorialize ("this is a terrible bug").
-- The "Possible approaches" section is what makes a good issue great. Doing the investigation upfront saves the implementer from re-discovering the same context.
-- Task lists should be concrete and ordered. "Implement the fix" is not a task. "Add null check in `handleClick` before dispatching" is.
-- Test plans should be specific scenarios, not "test that it works."
+- **Scale to the request.** A one-liner bug should produce a one-paragraph issue. Resist the urge to over-investigate or over-document simple things.
+- Be specific about file paths. Vague issues waste time.
+- Task lists should be concrete. "Implement the fix" is not a task.
+- When breaking down large work, each issue should stand alone — someone should be able to pick it up without reading all the other issues.

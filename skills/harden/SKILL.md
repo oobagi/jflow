@@ -197,9 +197,7 @@ Present what was done:
 
 ## Integration with /autopilot
 
-When invoked from `/autopilot`, this skill runs at **phase boundaries** (not per-item). After all items in a phase are shipped, autopilot runs:
-
-`/harden` → `/docs` → `/simplify` → `/checkup`
+When invoked from `/autopilot thorough`, this skill runs at **phase boundaries** (not per-item). Phase boundary maintenance is opt-in — autopilot only runs it when the `thorough` flag is set.
 
 In this context:
 - Always run in `fix` mode (not audit)
@@ -207,8 +205,6 @@ In this context:
 - Skip stack detection (already known from earlier in the loop)
 - Only flag critical and high severity issues, defer medium/low
 - If no issues found, report clean and move on immediately
-
-Note: per-item security coverage comes from the Security Engineer agent dispatched by `/test` on every item. `/harden` at phase boundaries catches broader patterns (missing validation, error handling gaps, logging) that accumulate across multiple items.
 
 ## Style guidelines
 

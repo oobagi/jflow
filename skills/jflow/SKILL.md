@@ -1,338 +1,160 @@
 ---
 name: jflow
 description: >
-  End-to-end app builder. Runs an upfront interview to catch all blockers (API keys, secrets,
-  services, design, deployment), resolves them, then chains /setup → /autopilot to build
-  the entire app from scaffolding to merged PRs in one command.
+  End-to-end app builder. Quick interview to catch blockers (API keys, services, design),
+  then chains /setup → /autopilot to build the app.
 user-invocable: true
 argument-hint: >
-  [app idea, e.g. "daily briefing app with Stripe billing" | "skip-setup" to resume from autopilot on existing project | "dry-run" to preview plan without executing]
+  [app idea, e.g. "daily briefing app with Stripe" | "skip-setup" to resume on existing project | "dry-run" to preview]
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent, AskUserQuestion, Skill, TaskCreate, TaskUpdate, TaskList, WebFetch
 effort: high
 ---
 
 # jflow
 
-Build an entire app from a rough idea — scaffolding, implementation, review, and shipping — in one command. The interview phase catches every blocker upfront so nothing surfaces hours into the build.
+Build an app from a rough idea — scaffolding, implementation, and shipping — in one command.
 
 ## 0. Parse arguments
 
 - Extract the app idea from `$ARGUMENTS`
-- Check for flags:
-  - `skip-setup` — project already exists, skip to the bridge + autopilot
-  - `dry-run` — show the full plan (interview results, roadmap preview, blocker list) without executing
-  - `interactive` — pass through to `/autopilot` (confirm before each item)
-- If `$ARGUMENTS` is empty and no flags, prompt with `AskUserQuestion`: "What do you want to build?"
+- Flags:
+  - `skip-setup` — project already exists, skip to bridge + autopilot
+  - `dry-run` — show the plan without executing
+  - `interactive` — pass through to `/autopilot`
+- If empty and no flags, ask: "What do you want to build?"
 
-## 1. Interview — single-pass blocker detection
+## 1. Interview
 
-The goal: one comprehensive question that covers everything `/setup` asks PLUS everything that would otherwise surface in `todo.txt` and block the build 2 hours in. The user answers what they can and skips what they're unsure about.
+One question. Cover what's needed, skip what's obvious from the app idea.
 
-### 1a. Comprehensive intake
+### 1a. Intake
 
-Parse the app idea from `$ARGUMENTS` to pre-fill what you can infer (e.g., "Next.js app with Stripe" implies web platform, Node stack, payment processing). Then present ONE `AskUserQuestion` with everything still needed:
+Parse the app idea to pre-fill what you can infer. Then present ONE `AskUserQuestion` with only the gaps:
 
-> **Let's get everything upfront so the build runs clean.**
+> **Quick setup — answer what you know, skip what you don't.**
 >
-> **Project:**
-> 1. Project name (kebab-case)
-> 2. One-sentence tagline
-> 3. Tech stack — language, framework, libraries
-> 4. Key features / goals
-> 5. Target platform — web, iOS, CLI, server, desktop
-> 6. Repo visibility — public or private? (default: private)
+> **Project:** name, stack, key features, platform (web/mobile/CLI)
+> **Services** (if any): database, auth, payments, AI, email, storage
+> **Deploy:** where? (Vercel, Fly, Railway, etc.)
+> **Design** (if UI): reference URL, colors, component library — or "surprise me"
 >
-> **Services** (skip any that don't apply):
-> 7. Database — which one? Do you already have an instance running?
-> 8. Auth — provider and method? (e.g., NextAuth, Clerk, Supabase Auth) Which social logins?
-> 9. Payments — Stripe? Do you have API keys (even test keys)?
-> 10. AI/LLM — which provider? Do you have an API key?
-> 11. Email — transactional provider? (Resend, SendGrid, etc.)
-> 12. File storage — S3, R2, Supabase Storage, local?
-> 13. Any other third-party APIs or services?
->
-> **Deployment:**
-> 14. Where will this deploy? (Vercel, Fly.io, Railway, AWS, Cloudflare, etc.)
-> 15. Custom domain? Do you own one?
->
-> **Design** (skip for CLI/API-only projects):
-> 16. Design reference — URL of a site you like, screenshot, or "surprise me"
-> 17. Color scheme / brand colors / dark mode preference
-> 18. Component library — shadcn/ui, Radix, MUI, Tailwind-only, etc.
->
-> Answer what you know, skip what you don't. I'll use sensible defaults for anything left blank.
+> I'll use sensible defaults for anything left blank.
 
-If the app idea in `$ARGUMENTS` is rich enough to answer most of these, only ask about the gaps — don't re-ask what's already clear.
+If the app idea already answers most of this, only ask about the actual gaps — don't re-ask what's clear. For simple projects (CLI tool, library, API), skip design and deployment questions entirely.
 
-### 1b. Targeted follow-ups (0-2 questions max)
+### 1b. Follow-up (0-1 questions max)
 
-After parsing the intake, identify critical ambiguities only:
-- They said "auth" but not which provider — ask
-- They said "database" but not which one — recommend based on stack and confirm
-- Features suggest a service they didn't mention (e.g., "user profiles with avatars" implies file storage)
+Only if there's a critical ambiguity (e.g., they said "auth" but not which provider). Otherwise skip.
 
-If the answers from 1a are clear, skip follow-ups entirely.
-
-### 1c. Environment validation (automated — no questions)
-
-Silently check what's already available on the machine:
+### 1c. Environment check (silent)
 
 ```bash
-# CLI tools
-gh auth status                          # GitHub CLI
-node --version 2>/dev/null              # Node.js (if JS/TS stack)
-python3 --version 2>/dev/null           # Python (if Python stack)
-cargo --version 2>/dev/null             # Rust (if Rust stack)
-docker --version 2>/dev/null            # Docker (if they need it)
-
-# Existing credentials
-echo "${ROADMAP_PAT:-(not set)}"
-echo "${STRIPE_SECRET_KEY:-(not set)}"
-echo "${OPENAI_API_KEY:-(not set)}"
-echo "${SUPABASE_URL:-(not set)}"
-echo "${DATABASE_URL:-(not set)}"
-# ... check any other env vars relevant to their stated services
+gh auth status
+# Check relevant CLI tools and env vars based on stated stack
 ```
 
-Build two lists:
-- **Ready** — tools installed, credentials found
-- **Missing** — tools not installed, credentials not set, services not configured
+Build ready/missing lists.
 
 ## 2. Resolve blockers
 
-Present all missing items grouped into one `AskUserQuestion` — not one question per blocker. Categorize clearly:
+If anything is missing, present ONE grouped question:
 
-> **A few things to set up before the build starts:**
+> **Before we start:**
 >
-> **Need from you** (paste values or "skip" to defer):
-> - Stripe test key (get one at https://dashboard.stripe.com/test/apikeys)
-> - Supabase project URL + anon key (create at https://supabase.com/dashboard)
->
-> **I'll install** (just confirming):
-> - `shadcn/ui` — will set up during scaffolding
->
-> **Optional** (can do later):
-> - Custom domain DNS setup
-> - Production API keys (test keys are fine for now)
+> **Need from you:** [credentials/keys with links to get them]
+> **I'll install:** [packages/tools during setup]
+> **Optional (can do later):** [non-critical items]
 
-For each credential the user provides:
-- Store it in memory for writing to `.env` after `/setup` creates the project directory
-- Never log, commit, or echo credentials back
+For credentials the user provides: store for `.env`, never echo back.
 
-For missing CLI tools, provide the install command and ask the user to run it (or offer to run it):
-- `brew install node` / `brew install python` / etc.
+**Hard gate:** Stack tools must be installed, `gh` must be authenticated, Phase 1 API keys must exist.
+**Soft gate:** Design preferences, domains, production keys — defer.
 
-**Hard gate:** Do not proceed past this step if critical blockers remain — tools required by the stated stack must be installed, `gh` must be authenticated. API keys for services used in Phase 1 roadmap items are critical; keys for later phases can be deferred.
+If nothing is missing, skip.
 
-**Soft gate:** Design preferences, custom domains, production keys — defer these with a note.
-
-If nothing is missing, skip this step entirely.
-
-## 3. Design capture (conditional)
-
-Only for projects with a UI (web app, mobile app, desktop — not CLI, API, or library).
-
-- If they provided a design reference URL: invoke the `scrape-design` skill with that URL. Capture the output — it will inform `/design` later.
-- If they stated color/component preferences: record them.
-- If they said "surprise me" or skipped: note that `/design create` will generate a default system.
-- If no UI: skip entirely.
-
-## 4. Show the plan
-
-Before executing anything, present a summary of what's about to happen:
+## 3. Show the plan
 
 ```
 ═══════════════════════════════════════
   jflow — Starting
 ═══════════════════════════════════════
 
-  App: <project-name> — "<tagline>"
+  App: <name> — "<tagline>"
   Stack: <stack>
-  Platform: <platform>
   Deploy: <target>
 
-  Blockers resolved:
-    ✓ Stripe test key — provided
-    ✓ Supabase credentials — provided
-    ✓ Node.js v22 — installed
-    • Custom domain — deferred
-
   Plan:
-    1. /setup — scaffold repo, CI/CD, roadmap, issues
-    2. Bridge — install deps, write .env, verify build
-    3. /design — create design system (from reference)
-    4. /autopilot — build all roadmap items
+    1. /setup — scaffold repo, CI, roadmap, issues
+    2. Bridge — deps, .env, verify build
+    3. /autopilot — build all items
 
 ═══════════════════════════════════════
 ```
 
-If `dry-run` flag is set, stop here.
+If `dry-run`, stop here.
 
-## 5. Invoke `/setup`
+## 4. Run `/setup`
 
-Invoke the `setup` skill via the Skill tool with all gathered context as the argument string. Include:
-- Project name, tagline, tech stack, features, services, platform, visibility
-- Be explicit: "Do NOT re-ask these questions — they've already been answered"
+Invoke the `setup` skill with all gathered context. Be explicit: "Do NOT re-ask these questions."
 
-Example invocation:
-```
-skill: "setup", args: "Project: daily-briefing. Tagline: AI-powered daily briefing with billing. Stack: Next.js 14 + Supabase + Stripe. Features: 1) AI-generated daily briefings from RSS/news APIs, 2) Stripe subscription billing, 3) Email delivery via Resend, 4) User dashboard. Services: Supabase (auth + db + storage), Stripe (payments), OpenAI (summarization), Resend (email). Platform: web. Visibility: private. License: MIT. Do NOT re-ask these questions — they've already been answered in the jflow interview."
-```
+## 5. Bridge
 
-Wait for `/setup` to complete. Capture the repo URL and issue count from its output.
+In the new project directory:
 
-## 6. Bridge — post-setup, pre-autopilot
+### 5a. Install dependencies
+Run the appropriate install command for the stack.
 
-This fills the gap between a scaffolded repo and a buildable project. Run these steps in the newly created project directory (`~/Developer/<project-name>`):
+### 5b. Write `.env`
+Create `.env` with collected credentials. Verify `.env` is in `.gitignore`.
 
-### 6a. Install dependencies
+### 5c. Verify build
+Run a quick build/lint. If it fails, diagnose and fix before continuing.
 
-```bash
-# Run the appropriate install command based on stack
-npm install          # Node.js / Next.js / React
-pip install -e '.[dev]'  # Python
-cargo build          # Rust
-go mod tidy          # Go
-bundle install       # Ruby
-```
+### 5d. Design system (if UI project)
+If design context was captured, invoke `/design create`.
 
-### 6b. Write `.env`
+### 5e. Clean up todo.txt
+Check off resolved items from `/setup`'s `todo.txt`. Delete if all done.
 
-Create a `.env` file with all credentials collected in step 2:
+## 6. Run `/autopilot`
 
-```bash
-# Verify .env is in .gitignore (it should be from /setup)
-grep -q '.env' .gitignore || echo '.env' >> .gitignore
-```
+Invoke `/autopilot`. Pass `interactive` flag if the user requested it.
 
-Write the `.env` with all collected values. Use comments to label sections:
-
-```
-# Database
-SUPABASE_URL=<value>
-SUPABASE_ANON_KEY=<value>
-
-# Payments
-STRIPE_SECRET_KEY=<value>
-STRIPE_PUBLISHABLE_KEY=<value>
-
-# AI
-OPENAI_API_KEY=<value>
-```
-
-### 6c. Verify build
-
-Run a quick build/lint to confirm the scaffolded project compiles before autopilot starts:
-
-```bash
-npm run build 2>&1 || npm run lint 2>&1    # Node.js
-cargo check 2>&1                            # Rust
-python -m py_compile <main-file> 2>&1       # Python
-```
-
-If the build fails, diagnose and fix the issue. Common causes:
-- Missing dependencies — run install again
-- TypeScript config issues — fix `tsconfig.json`
-- Missing env vars at build time — adjust config to defer env checks to runtime
-
-Do NOT proceed to `/autopilot` if the project doesn't build.
-
-### 6d. Design system (conditional)
-
-If design context was captured in step 3:
-
-- Invoke the `design` skill: `skill: "design", args: "create"`
-- If a `/scrape-design` output exists, reference it so the design system matches the reference
-- This creates `DESIGN.md` and framework-specific token files that implementation agents will follow
-
-If no UI or no design context, skip.
-
-### 6e. Update `todo.txt`
-
-Read the `todo.txt` that `/setup` generated. Check off any items that were already resolved in step 2 (API keys provided, secrets configured, tools installed). If all items are checked, delete the file.
-
-### 6f. Compact context
-
-The interview + setup phases consume significant context. Run `/compact` (built-in CLI command, not a Skill invocation) before starting autopilot to free up space for the build loop.
-
-After compact, re-state the current position:
-
-> **Resuming jflow.** Setup complete for `<project-name>`. Starting `/autopilot` — N roadmap items across M phases.
-
-## 7. Invoke `/autopilot`
-
-Invoke the `autopilot` skill via the Skill tool:
-
-```
-skill: "autopilot"
-```
-
-If the `interactive` flag was set, pass it: `skill: "autopilot", args: "interactive"`
-
-`/autopilot` handles the full loop: `/next` → `/harden` → `/test` → `/ship` per item, with `/docs` + `/simplify` + `/checkup` at phase boundaries and `/qa auto` at the end.
-
-Wait for it to complete.
-
-## 8. Summary
-
-Combine outputs from all phases into one final summary:
+## 7. Summary
 
 ```
 ═══════════════════════════════════════
   jflow — Complete
 ═══════════════════════════════════════
 
-  App: <project-name> — "<tagline>"
-  Repo: https://github.com/<user>/<project-name>
-  Stack: <stack>
+  App: <name>
+  Repo: <url>
 
-  Setup:
-    • Scaffolded N files
-    • Created N GitHub issues across M phases
-    • CI/CD, branch protection, roadmap sync
-
-  Blockers resolved:
-    ✓ Stripe test key
-    ✓ Supabase credentials
-    ✓ Design system created from reference
-
-  Build:
-    • Items shipped: N / M
-    • PRs merged: N
-    • Phases cleared: N
-
-  Quality:
-    • Docs syncs: N
-    • Simplify passes: N
-    • QA: N passed, N failed
+  Items shipped: N / M
+  PRs merged: N
 
   Deferred:
-    • Custom domain setup
-    • Production API keys
+    • <anything skipped>
 
   Next:
-    1. Review any /qa failures above
-    2. Set up deferred items
-    3. Deploy to <target>
-    4. /autopilot to continue remaining items (if any)
+    1. Deploy to <target>
+    2. /autopilot to continue remaining items
 
 ═══════════════════════════════════════
 ```
 
-## 9. Error recovery
+## 8. Error recovery
 
-| Failure point | What happens | How to resume |
-|---|---|---|
-| Interview aborted | Nothing was created | Re-run `/jflow` |
-| `/setup` fails | Partial scaffolding | Fix the issue, then `/jflow skip-setup` |
-| Bridge fails (deps/build) | Repo exists but doesn't build | Fix manually, then `/autopilot` |
-| `/autopilot` fails mid-run | Some items shipped, some not | `/autopilot` to resume from next uncompleted item |
+| Failure | Resume |
+|---|---|
+| Interview aborted | Re-run `/jflow` |
+| `/setup` fails | Fix, then `/jflow skip-setup` |
+| Bridge fails | Fix manually, then `/autopilot` |
+| `/autopilot` fails | `/autopilot` to resume |
 
 ## Style guidelines
 
 - Follow the standard output format in `_output-format.md`
-- The interview should feel fast — one big question, not a wizard
-- Batch blocker resolution into one question, not one per credential
-- Show clear phase transitions: Interview → Setup → Bridge → Build
-- Never echo credentials back to the user after they provide them
-- Be explicit about what's blocking vs. what's optional
+- Interview should feel fast — one question, not a wizard
+- Batch blockers into one question
+- Never echo credentials back
