@@ -73,7 +73,7 @@ Once implementation is complete:
 - Complex business logic or state management
 - The implementation agent reported uncertainty about any part
 
-3. Present the result:
+3. Present the result with a **How to test** section — brief, concrete steps the user can follow to verify each change manually:
 
 ```
 ═══════════════════════════════════════
@@ -88,6 +88,11 @@ Once implementation is complete:
     ✓ Implemented
     ✓ Lint — clean
     ✓ Tests — passing
+
+  How to test:
+    <command to run the app, e.g. "go run ./cmd/notebook">
+    - <step 1 — what to do and what to expect>
+    - <step 2 — etc.>
 
   Next: /ship
   (or)
