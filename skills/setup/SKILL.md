@@ -548,7 +548,7 @@ gh api repos/<user>/<repo>/branches/main/protection \
   --input - <<'EOF'
 {
   "required_status_checks": {
-    "strict": true,
+    "strict": false,
     "contexts": ["test"]
   },
   "enforce_admins": true,
