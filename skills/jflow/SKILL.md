@@ -137,8 +137,9 @@ Invoke `/autopilot`. Pass `interactive` flag if the user requested it.
     • <anything skipped>
 
   Next:
-    1. Deploy to <target>
-    2. /autopilot to continue remaining items
+    1. /release preview to publish a test build
+    2. Deploy to <target>
+    3. /autopilot to continue remaining items
 
 ═══════════════════════════════════════
 ```

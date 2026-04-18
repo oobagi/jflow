@@ -161,10 +161,14 @@ When the loop finishes:
   Remaining:
     • N items still open
 
-  Resume: /autopilot
+  Next:
+    • /release preview to publish what just shipped (if anything user-facing landed)
+    • /autopilot to continue remaining items
 
 ═══════════════════════════════════════
 ```
+
+Only include the `/release` suggestion line when at least one item actually shipped this run.
 
 ## 5. Error recovery
 
