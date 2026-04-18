@@ -27,7 +27,7 @@
 
 The power is in the flows. `/jflow "your app idea"` runs an upfront interview that catches every blocker (API keys, secrets, services, design preferences) then chains `/setup` → `/autopilot` to scaffold, implement, review, and ship the entire app without stopping. `/autopilot` works through your roadmap: picks up the next item, implements it, dispatches parallel review agents, opens a PR, waits for CI, merges, and loops, running `/docs`, `/simplify`, and `/checkup` at phase boundaries. `/polish` does the same for ad-hoc work you've already built. One command in, merged PRs out.
 
-The individual skills are useful on their own too. `/feature` breaks a big idea into phased GitHub issues with a roadmap. `/issue` turns a rough complaint into a well-scoped ticket. `/qa auto` opens the app in a real browser, clicks through every feature, takes screenshots, and reports what's broken. `/test` dispatches up to 6 review agents in parallel against your uncommitted changes and spawns fixers for anything they flag.
+The individual skills are useful on their own too. `/issue` turns a rough complaint into a well-scoped ticket, and auto-scales to a multi-issue breakdown with a roadmap when the idea is bigger. `/qa auto` opens the app in a real browser, clicks through every feature, takes screenshots, and reports what's broken. `/test` dispatches up to 6 review agents in parallel against your uncommitted changes and spawns fixers for anything they flag.
 
 ## Install
 
@@ -55,14 +55,14 @@ Invoked via `/skill-name`. Orchestrate agents, manage branches, ship code.
 | `/ship` | Branch, commit, PR, CI, merge, cleanup | — |
 | `/harden` | Security audit + input validation + error boundaries | `audit` `fix` `logging` `validation` `errors` `boundaries` |
 | `/simplify` | Parallel agents fix DRY violations, dead code, complexity | `full` `scope:PATH` `dry-only` `dead-only` `logic-only` |
-| `/feature` | Plan and scope multi-issue feature work | *feature description* |
-| `/issue` | Turn a rough idea into a well-scoped GitHub issue | *problem description* |
+| `/issue` | Turn a rough idea into GitHub issues, auto-scaling to a multi-issue breakdown for bigger work | *problem description* |
 | `/setup` | Scaffold new project: repo, CI/CD, docs, roadmap, issues | *project description* |
 | `/docs` | Sync README, ROADMAP, CHANGELOG, docs/ with codebase state | `changelog` `full` |
 | `/design` | Design system creation or audit (colors, typography, components) | `create` `audit` |
 | `/scrape-design` | Playwright-based website design extraction | *url* |
 | `/sitrep` | Branch health, stale worktrees, uncommitted work, recent activity | — |
 | `/qa` | Walk through testing every feature, or `auto` for Playwright-driven testing | `auto` `latest` |
+| `/release` | Cut a release — triggers the project's release mechanism and monitors to completion | `preview` `production` `--screenshots` |
 | `/checkup` | Git hygiene: prune remotes, remove stale branches/worktrees, gc | `now` |
 | `/upgrade-jflow` | Pull latest jflow, re-run installer | `check` `force` |
 
