@@ -122,14 +122,22 @@ The scope is **every distinct user-visible surface** in this release — not eve
 - For each surface, infer the navigation path from the PR body/diff: which screen it lives on, what taps reach it, whether a sheet/modal must be opened. Read relevant component files from the source tree if the path is ambiguous.
 - If no user-facing feature PRs, output: "No user-facing features in this release — no screenshots captured." Proceed to step 8.
 
-#### c. Boot devices + verify app
+#### c. Prereqs: dev server + devices + app launch (assume cold start)
 
-For each platform in scope:
-- `mcp__maestro__list_devices` — see what's already booted
-- If nothing booted: `mcp__maestro__start_device` with `platform: "ios"` or `"android"`
-- `mcp__maestro__launch_app` with the discovered app ID
+Assume nothing is running. Do NOT ask the user to start the dev server or boot a simulator — handle it yourself.
 
-If launch fails (app not installed): log "App not installed on `<platform>` — skipping that platform" and continue with the other platform if applicable. Do NOT install the app from this skill.
+1. **Dev server (mobile projects with a dev client)**. Expo / React Native dev clients need Metro on 8081 or the app shows a red-box "No script URL provided" / "Could not connect to development server". If the project has an Expo/RN dev client:
+   ```bash
+   lsof -iTCP:8081 -sTCP:LISTEN -P -n >/dev/null 2>&1 || \
+     (cd <repo-root> && nohup npx expo start > /tmp/metro.log 2>&1 &)
+   until lsof -iTCP:8081 -sTCP:LISTEN -P -n >/dev/null 2>&1; do sleep 1; done
+   ```
+   Run Metro in the background (e.g. `run_in_background: true`); don't block on it. Use the Monitor tool to wait for the port to come up, not a fixed sleep.
+   - Release / production builds don't need Metro — skip this sub-step if the installed artifact is a release build.
+
+2. **Devices**. For each platform in scope, `mcp__maestro__list_devices`. Pick a connected device if one exists; otherwise `mcp__maestro__start_device` with `platform: "ios"` or `"android"`.
+
+3. **Launch app**. `mcp__maestro__launch_app` with the discovered app ID. Inspect the view hierarchy — if you see a red-box error, Metro is still booting or crashed; re-check 8081 and retry the launch. If the app itself isn't installed, log `"App not installed on <platform> — skipping that platform"` and continue with the other platform if applicable. Do NOT install the app from this skill.
 
 #### d. Capture loop
 
