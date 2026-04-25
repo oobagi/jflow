@@ -60,7 +60,7 @@ git clone https://github.com/oobagi/agency-skills.git ~/.jflow && cd ~/.jflow &&
 
 Symlinks skills/agents into `~/.claude/`, copies hooks, merges settings (preserves your config). Requires `git` and `jq`.
 
-Flags: `--dry-run` (preview) | `--no-settings` (skip settings merge) | `--no-rtk` (skip token proxy) | `--uninstall`
+Flags: `--dry-run` (preview) | `--no-settings` (skip settings merge) | `--uninstall`
 
 > The Go binary install (`go install ./cmd/jflow/`) is wired into Phase 5 of the roadmap. Until then, run the prototype directly: `cd ~/.jflow && go run ./cmd/jflow/`.
 
@@ -181,19 +181,7 @@ Specialized AI personas dispatched by skills. Based on [agency-agents](https://g
 
 ## Bundled Tools
 
-Installed and configured automatically. Skip any with install flags (`--no-rtk`) or by editing `settings.json` after install.
-
-### RTK — token compression proxy
-
-60–90% savings on dev operations. A `PreToolUse` hook transparently rewrites Bash commands before they execute:
-
-```
-git log --oneline -20  →  rtk git log --oneline -20
-```
-
-Covers: git, gh, grep, cat, curl, docker, kubectl, vitest, pytest, cargo, go, and more. Strips verbose formatting, trims whitespace, and compresses output so Claude consumes fewer tokens per tool call.
-
-Installed to `~/.local/bin/rtk`. Skip with `--no-rtk` during install.
+Installed and configured automatically. Disable any by editing `settings.json` after install.
 
 ### code-simplifier — Claude Code plugin
 
@@ -215,7 +203,6 @@ Today (skill bundle):
 ~/.jflow/                                ~/.claude/
 ├── skills/ ─────────── symlink ──────> ├── skills/
 ├── agents/ ─────────── symlink ──────> ├── agents/
-├── hooks/rtk-rewrite.sh ── copy ─────> ├── hooks/rtk-rewrite.sh
 └── settings/base.json ──── merge ────> └── settings.json
 ```
 

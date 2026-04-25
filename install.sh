@@ -15,13 +15,11 @@ VERSION=$(cat "$SCRIPT_DIR/VERSION")
 UNINSTALL=false
 DRY_RUN=false
 NO_SETTINGS=false
-NO_RTK=false
 for arg in "$@"; do
   case "$arg" in
     --uninstall)   UNINSTALL=true ;;
     --dry-run)     DRY_RUN=true ;;
     --no-settings) NO_SETTINGS=true ;;
-    --no-rtk)      NO_RTK=true ;;
     --help|-h)
       echo "jflow v$VERSION — Claude Code skill/agent stack"
       echo ""
@@ -31,7 +29,6 @@ for arg in "$@"; do
       echo "  --uninstall     Remove jflow symlinks, hooks, and settings entries"
       echo "  --dry-run       Show what would happen without making changes"
       echo "  --no-settings   Skip settings.json merge"
-      echo "  --no-rtk        Skip rtk installation"
       echo "  --help          Show this help"
       exit 0
       ;;
@@ -174,13 +171,14 @@ merge_settings() {
           )
           | if .hooks.PostToolUse | length == 0 then del(.hooks.PostToolUse) else . end
         else . end
-      # Remove old rtk-rewrite PreToolUse hooks (will be re-added from base)
+      # Remove old rtk-rewrite PreToolUse hooks (rtk is no longer bundled).
       | if .hooks.PreToolUse then
           .hooks.PreToolUse |= map(
             select(.hooks | all(.command | test("rtk-rewrite") | not))
           )
           | if .hooks.PreToolUse | length == 0 then del(.hooks.PreToolUse) else . end
         else . end
+      | if .hooks // {} | length == 0 then del(.hooks) else . end
       # Remove legacy env var
       | if .env.DOTFILES_REPO then del(.env.DOTFILES_REPO) else . end
     ) as $cleaned |
@@ -211,43 +209,6 @@ merge_settings() {
 
   echo "$merged" | jq '.' > "$target"
   info "Merged settings (jflow v$VERSION)"
-}
-
-# --- Install rtk ---
-install_rtk() {
-  if $NO_RTK; then
-    info "Skipping rtk installation (--no-rtk)"
-    return
-  fi
-
-  if command -v rtk &>/dev/null; then
-    info "rtk already installed ($(rtk --version 2>/dev/null || echo 'unknown version'))"
-    return
-  fi
-
-  if ! command -v curl &>/dev/null; then
-    warn "curl not found — skipping rtk install. Install manually: https://github.com/rtk-ai/rtk"
-    return
-  fi
-
-  info "Installing rtk (token-compression proxy for Claude Code)..."
-
-  if $DRY_RUN; then
-    echo "  [dry-run] Would install rtk via curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh"
-    return
-  fi
-
-  if curl -fsSL https://raw.githubusercontent.com/rtk-ai/rtk/master/install.sh | sh 2>&1 | sed 's/^/    /'; then
-    # Ensure ~/.local/bin is in PATH for this session
-    export PATH="$HOME/.local/bin:$PATH"
-    if command -v rtk &>/dev/null; then
-      info "rtk installed successfully ($(rtk --version 2>/dev/null || echo 'unknown version'))"
-    else
-      warn "rtk installed to ~/.local/bin — add to PATH: export PATH=\"\$HOME/.local/bin:\$PATH\""
-    fi
-  else
-    warn "rtk install failed — install manually: https://github.com/rtk-ai/rtk"
-  fi
 }
 
 # --- Uninstall ---
@@ -284,13 +245,11 @@ uninstall() {
     done
   fi
 
-  # Remove jflow-installed hooks
-  for hook in rtk-rewrite.sh; do
-    if [ -f "$CLAUDE_DIR/hooks/$hook" ]; then
-      run rm "$CLAUDE_DIR/hooks/$hook"
-      info "Removed hook: $hook"
-    fi
-  done
+  # Remove legacy rtk-rewrite hook (rtk is no longer bundled).
+  if [ -f "$CLAUDE_DIR/hooks/rtk-rewrite.sh" ]; then
+    run rm "$CLAUDE_DIR/hooks/rtk-rewrite.sh"
+    info "Removed legacy hook: rtk-rewrite.sh"
+  fi
 
   # Restore settings backup if it exists
   if [ -f "$CLAUDE_DIR/settings.json.pre-jflow" ]; then
@@ -320,15 +279,12 @@ main() {
   install_agents
   install_hooks
   merge_settings
-  install_rtk
 
   echo ""
   echo "jflow v$VERSION installed successfully!"
   echo ""
   echo "  Skills:   $(ls -1d "$JFLOW_DIR"/skills/*/ 2>/dev/null | wc -l | tr -d ' ') skills linked"
   echo "  Agents:   $(ls -1 "$JFLOW_DIR"/agents/*.md 2>/dev/null | wc -l | tr -d ' ') agents linked"
-  echo "  Hooks:    rtk-rewrite.sh"
-  echo "  rtk:      $(command -v rtk &>/dev/null && rtk --version 2>/dev/null || echo 'not in PATH — add ~/.local/bin')"
   echo "  Settings: merged into ~/.claude/settings.json"
   echo ""
   echo "  Install location: $JFLOW_DIR"
