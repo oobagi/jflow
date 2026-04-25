@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textarea"
+	"charm.land/lipgloss/v2"
 )
 
 // Composer wraps a textarea for multiline user input.
@@ -23,8 +24,23 @@ func NewComposer() Composer {
 	t.Prompt = ""
 	t.ShowLineNumbers = false
 	t.CharLimit = 0
+
+	// Strip the textarea's stock cursor-row highlight (it painted a solid
+	// block under the focused line) and reset the placeholder so it stays
+	// dim against whatever the surrounding terminal background is.
+	plain := lipgloss.NewStyle()
+	placeholder := lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	styles := t.Styles()
+	styles.Focused.CursorLine = plain
+	styles.Focused.CursorLineNumber = plain
+	styles.Focused.Placeholder = placeholder
+	styles.Blurred.CursorLine = plain
+	styles.Blurred.CursorLineNumber = plain
+	styles.Blurred.Placeholder = placeholder
+	t.SetStyles(styles)
+
 	t.SetWidth(80)
-	t.SetHeight(3)
+	t.SetHeight(1)
 	t.Focus()
 	return Composer{ta: t}
 }
@@ -34,6 +50,16 @@ func (c *Composer) SetWidth(w int) { c.ta.SetWidth(w) }
 
 // SetHeight resizes the composer's vertical capacity.
 func (c *Composer) SetHeight(h int) { c.ta.SetHeight(h) }
+
+// LineCount returns the number of soft-wrapped logical lines in the current
+// value. Used by App to grow the composer as the user types multi-line input.
+func (c Composer) LineCount() int {
+	v := c.ta.Value()
+	if v == "" {
+		return 1
+	}
+	return strings.Count(v, "\n") + 1
+}
 
 // View renders the composer.
 func (c Composer) View() string { return c.ta.View() }

@@ -49,7 +49,7 @@ Putting orchestration in code means jflow can:
 - share a **flat todo list** between the worker (via a bundled MCP server) and the user (via a focusable right pane) — no more guessing what the agent thinks it's doing
 - spawn cheap Sonnet meta-calls for orchestration decisions ("is the worker stuck?", "grade this output") without polluting the worker's context
 
-Status: Phase 1 prototype is working end-to-end (single-pane chat with streaming, status bar, per-turn driver lifecycle). Phase 2 (workspaces / sessions / todo pane) is next. Track progress in [`ROADMAP.md`](ROADMAP.md).
+Status: Phase 1 is wired end-to-end — a three-pane TUI shell (workspaces stub / chat / session info), streaming transcript with per-response timing, async cancellable `claude -p` driver, `?` help overlay, and worktree/branch label on the composer rule. Phase 2 turns the right pane into a real todo list and the left pane into a workspace switcher. Track progress in [`ROADMAP.md`](ROADMAP.md).
 
 ## Install
 

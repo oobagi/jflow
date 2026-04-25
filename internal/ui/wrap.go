@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 )
@@ -74,10 +75,11 @@ func wrapToWidth(s string, width int) string {
 
 // wrapWithPrefix wraps s to width, then prepends `prefix` to the first line
 // and `cont` to each continuation line. Returns the combined string.
-// prefix and cont should be the same display width (so continuation lines
-// align under the first line).
+// prefix and cont should be the same *visible* width (so continuation lines
+// align under the first line). lipgloss.Width is used for measurement so
+// ANSI escape sequences inside `prefix` are correctly treated as zero-width.
 func wrapWithPrefix(s, prefix, cont string, width int) string {
-	prefixW := uniseg.StringWidth(prefix)
+	prefixW := lipgloss.Width(prefix)
 	body := wrapToWidth(s, width-prefixW)
 	parts := strings.Split(body, "\n")
 	out := make([]string, 0, len(parts))
@@ -90,3 +92,4 @@ func wrapWithPrefix(s, prefix, cont string, width int) string {
 	}
 	return strings.Join(out, "\n")
 }
+

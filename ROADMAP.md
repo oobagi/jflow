@@ -29,23 +29,23 @@ The point of the harness: own context budget, compaction, and roadmap looping so
 
 Working today:
 - [x] Go module + cobra root (`jflow` binary, `jflow --version`, `jflow --debug`)
-- [x] `internal/claude` driver: spawns `claude -p --resume <uuid>` per turn, decodes JSONL into typed Go events
-- [x] Bubble Tea v2 single-pane TUI: transcript + composer + status bar
-- [x] Streaming render: text / thinking / tool_use blocks with distinct styling
-- [x] Status bar: model · permission-mode · tokens used / contextWindow (%) · running cost · rate-limit chip
-- [x] Per-turn driver lifecycle (one fresh `claude -p` per user enter, same `--session-id`/`--resume <uuid>`)
+- [x] `internal/claude` driver: spawns `claude -p --resume <uuid>` per turn, decodes JSONL into typed Go events; stderr captured so it doesn't bleed into the TUI
+- [x] Bubble Tea v2 three-pane TUI shell: workspaces stub (left) · chat (center) · session info (right). The right pane currently shows model / mode / context % / cost / rate-limit; Phase 2 turns it into the todo list
+- [x] Streaming render: text / thinking / tool_use blocks with distinct styling, plus a dim "worked for 2.3s" trailer under each completed turn
+- [x] Per-turn driver lifecycle (one fresh `claude -p` per user enter, same `--session-id`/`--resume <uuid>`); spawn is async and cancellable via ⌃C/esc during the init window
 - [x] Always-on session log → `~/.jflow/state/logs/<ts>-<sid8>.jsonl` + `last.jsonl` symlink
 - [x] `--debug` flag adds verbose key-event meta entries
-- [x] Word-wrap with prefix-aware hanging indent (`internal/ui/wrap.go`, 5 unit tests)
+- [x] Word-wrap with prefix-aware hanging indent (`internal/ui/wrap.go`, 5 unit tests; ANSI-aware via `lipgloss.Width`)
 - [x] Stdin redirected to `/dev/null` so claude doesn't print the 3s "no stdin data" warning
-- [x] Wired keybinds: `⏎` send · `⌃J` newline · `⌃X` interrupt · `⌃K` send `/compact` · `esc`/`⌃C` quit (or interrupt if claude is mid-turn)
+- [x] **Transcript scroll** (#25) — viewport with mouse wheel scrolling, bottom-anchored content
+- [x] **`?` help overlay** (#26) — bottom-sheet help panel listing every wired keybind
+- [x] Composer rule labelled with current worktree (cwd) and git branch
+- [x] Wired keybinds: `⏎` send · `⇧⏎`/`⌃J` newline · `⌃C` interrupt (no-op when idle, never quits) · `⌃K` `/compact` · `esc` quit (or interrupt mid-turn) · `?` help
 
 Still missing in Phase 1:
-- [ ] **Transcript scroll** (#25) — viewport for ↑/↓/PgUp/PgDn
-- [ ] **`?` help overlay** (#26)
 - [ ] **`⌃L` redraw / clear** (#28)
 - [ ] **Up-arrow on empty composer = previous-message recall** (#29)
-- [ ] **Banner / header with model + cwd + session uuid** (#30)
+- [ ] **Banner / header with model + cwd + session uuid** (#30) — partially addressed by the right-pane session info and composer-rule worktree/branch labels; an in-chat banner is still TBD
 - [ ] **Tool result rendering** (#31) — render `tool_result` blocks paired with their `tool_use`
 
 ## Phase 2 — workspaces + sessions + three-pane shell + todo pane
