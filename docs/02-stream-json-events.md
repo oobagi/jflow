@@ -182,9 +182,59 @@ Emitted *after* streaming completes for each assistant turn. Content array is no
 
 The TUI can use this to *replace* its accumulated stream with the canonical message — useful for redacting/normalizing what was streamed. We choose to **trust the streamed deltas** for live rendering and use `assistant` only as a sanity check / persistence record.
 
-## 12. `user` — user message echo (only with `--replay-user-messages`)
+## 12. `user` — user message echo *and* tool_result delivery
 
-Inferred shape (not captured in the trivial test because we used text input):
+The `user` event has two distinct uses:
+
+### 12a. tool_result (captured 2026-04-25, see `probes/tool-result.jsonl`)
+
+When claude executes a tool internally (Bash, Read, …), the harness feeds
+the output back into the conversation as a *user-role* message whose
+content carries one or more `tool_result` blocks keyed by `tool_use_id`.
+
+```json
+{
+  "type":"user",
+  "message":{
+    "role":"user",
+    "content":[{
+      "tool_use_id":"toolu_01UEFLUzdZhu46DH4bSGF4Zi",
+      "type":"tool_result",
+      "content":"hello-from-probe",
+      "is_error":false
+    }]
+  },
+  "parent_tool_use_id":null,
+  "session_id":"0d5123ea-...",
+  "uuid":"6cc0fceb-...",
+  "timestamp":"2026-04-25T15:23:11.583Z",
+  "tool_use_result":{
+    "stdout":"hello-from-probe",
+    "stderr":"",
+    "interrupted":false,
+    "isImage":false,
+    "noOutputExpected":false
+  }
+}
+```
+
+Notes:
+
+- `message.content[].tool_use_id` matches the `id` on the originating
+  `tool_use` content block — the TUI uses this to attach the result as a
+  footer on the corresponding tool block.
+- `message.content[].content` is usually a plain string but can also be
+  an array of `{type:"text"|"image",...}` parts (for tools that return
+  binary data).
+- `is_error:true` indicates the tool failed; the text in `content` is
+  the error message.
+- The sibling `tool_use_result` object is a side-channel with the raw
+  stdout/stderr split out — useful when `is_error` truncates the text
+  fed to the model.
+
+### 12b. user echo (only with `--replay-user-messages`)
+
+Inferred shape:
 ```json
 {
   "type":"user",
@@ -269,7 +319,8 @@ If `is_error:true`, `api_error_status` carries the upstream error.
 | `stream_event/message_delta` | update token totals |
 | `stream_event/message_stop` | seal the bubble |
 | `assistant` | sanity check; not directly rendered |
-| `user` | render echo of our own send |
+| `user` (tool_result) | attach as footer to matching tool_use block |
+| `user` (echo) | render echo of our own send |
 | `rate_limit_event` | status-bar update |
 | `result` | post-run summary; drives autopilot loop decisions |
 
@@ -277,7 +328,7 @@ If `is_error:true`, `api_error_status` carries the upstream error.
 
 1. Real shape of `thinking_delta` — confirm the field is `thinking` not `text`.
 2. Real shape of `tool_use` `content_block_start` — confirm `id` and `name` are siblings to `type`.
-3. `tool_result` events — when claude executes a tool internally (e.g. Bash), do we get a separate `tool_result` content block in a *user* message? Likely yes; needs capture.
+3. ~~`tool_result` events — when claude executes a tool internally (e.g. Bash), do we get a separate `tool_result` content block in a *user* message?~~ **Confirmed 2026-04-25** — see §12a.
 4. Full enum of `terminal_reason` and `result.subtype`.
 5. Whether the stream emits anything when `/compact` is invoked mid-session via stream-json input.
 

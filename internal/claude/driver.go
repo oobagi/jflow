@@ -17,21 +17,21 @@ import (
 // SpawnOpts configures a single `claude -p` invocation.
 // Each invocation handles one user→assistant turn.
 type SpawnOpts struct {
-	SessionID          string  // required uuid; --session-id on first call, --resume thereafter
-	Resume             bool    // false → use --session-id; true → use --resume
-	Prompt             string  // first/next user message; passed as positional arg
-	Model              string  // optional, e.g. "sonnet" / "opus"
-	Bare               bool    // --bare for tool-program sessions
-	SystemPromptFile   string  // --system-prompt-file
-	AppendSystemPrompt string  // --append-system-prompt
+	SessionID          string // required uuid; --session-id on first call, --resume thereafter
+	Resume             bool   // false → use --session-id; true → use --resume
+	Prompt             string // first/next user message; passed as positional arg
+	Model              string // optional, e.g. "sonnet" / "opus"
+	Bare               bool   // --bare for tool-program sessions
+	SystemPromptFile   string // --system-prompt-file
+	AppendSystemPrompt string // --append-system-prompt
 	AllowedTools       []string
 	Tools              []string
-	PermissionMode     string  // default | acceptEdits | auto | plan | dontAsk | bypassPermissions
+	PermissionMode     string // default | acceptEdits | auto | plan | dontAsk | bypassPermissions
 	MaxTurns           int
 	MaxBudgetUSD       float64
 	AddDirs            []string
 	CWD                string
-	Effort             string  // low | medium | high | xhigh | max
+	Effort             string // low | medium | high | xhigh | max
 
 	// LogWriter, if non-nil, receives every raw stdout JSONL line
 	// (each line followed by a single '\n'). Useful for "what happened
@@ -204,6 +204,36 @@ func (d *Driver) tailStderr() string {
 	return strings.TrimSpace(string(b))
 }
 
+// decodeToolResultContent extracts text from a tool_result `content`
+// field. Claude sends either a bare string (Bash/Read/etc.) or an array
+// of {type:text|image, ...} parts; image parts are skipped.
+func decodeToolResultContent(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &parts); err == nil {
+		var out strings.Builder
+		for _, p := range parts {
+			if p.Type == "text" && p.Text != "" {
+				if out.Len() > 0 {
+					out.WriteByte('\n')
+				}
+				out.WriteString(p.Text)
+			}
+		}
+		return out.String()
+	}
+	return ""
+}
+
 func parseLine(line []byte) (Event, error) {
 	var env Envelope
 	if err := json.Unmarshal(line, &env); err != nil {
@@ -293,7 +323,30 @@ func parseLine(line []byte) (Event, error) {
 		}
 		return AssistantSnapshot{Message: msg}, nil
 	case "user":
-		// best-effort extract: claude echoes user messages with --replay-user-messages.
+		// `user` events carry either an echo of the prompt (with
+		// --replay-user-messages) or a tool_result block fed back to the
+		// model after claude executed a tool. Distinguish by inspecting
+		// the message content array.
+		if len(env.Message) > 0 {
+			var um UserMsg
+			if err := json.Unmarshal(env.Message, &um); err == nil {
+				for _, cb := range um.Content {
+					if cb.Type != "tool_result" {
+						continue
+					}
+					tr := ToolResult{
+						ToolUseID: cb.ToolUseID,
+						IsError:   cb.IsError,
+						Text:      decodeToolResultContent(cb.Content),
+					}
+					if env.ToolUseResult != nil {
+						tr.Stdout = env.ToolUseResult.Stdout
+						tr.Stderr = env.ToolUseResult.Stderr
+					}
+					return tr, nil
+				}
+			}
+		}
 		return UserEcho{}, nil
 	case "rate_limit_event":
 		if env.RateLimitInfo == nil {
