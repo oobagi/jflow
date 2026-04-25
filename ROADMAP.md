@@ -38,11 +38,15 @@ Still missing in Phase 1:
 - [ ] **Better visibility into hook events** — they're written to the log but suppressed in the TUI; non-`--bare` sessions emit four `SessionStart` hooks per turn
 - [ ] **Tool result rendering** — when claude executes a tool internally (Bash/Read/Edit), we render the `tool_use` call but don't yet render the matching `tool_result` block
 
-## Phase 2 — workspaces + sessions persistence
+## Phase 2 — workspaces + sessions persistence + 3-pane shell
+
+Codex-app-inspired layout: **workspaces (left) · chat (center) · context (right)**.
 
 - [ ] `internal/workspace/` — cwd-keyed registry, `~/.jflow/state/workspaces.json`
 - [ ] `internal/session/` — per-session state (transcript, usage, status), `~/.jflow/state/sessions/<uuid>.json`
-- [ ] Three-pane TUI: workspaces / sessions / focus
+- [ ] Three-pane TUI shell — left: workspaces with sessions nested · center: chat (current Phase 1 view) · right: context
+- [ ] **Right-pane (context)** — togglable panels: todo · files touched · tool status · token/budget breakdown · session metadata. See [`docs/04-tui-design.md`](docs/04-tui-design.md#right-pane-context--phase-2).
+- [ ] **`/commands` palette** — type `/` in the composer to open a notebook-style Picker. Filterable list of jflow commands (`/tool autopilot`, `/workspace open`, `/session export`, `/compact-now`, …) plus pass-through to claude slash commands (`/compact`, `/clear`). See [`docs/04-tui-design.md`](docs/04-tui-design.md#commands-palette--phase-2).
 - [ ] `jflow workspace ls|add|rm`
 - [ ] `jflow session ls|export|rm`
 - [ ] Resume any prior session by id or name (uses claude's `--resume`)

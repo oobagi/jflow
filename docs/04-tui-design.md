@@ -128,3 +128,36 @@ For v0 we skip workspaces and sessions entirely. The TUI starts directly into th
 - status bar (tokens, cost)
 
 Once that works end-to-end, we add the three-pane chrome around it.
+
+## Right-pane (context) — Phase 2
+
+The right pane is for *side-information* that supports the active session without cluttering the transcript. Codex-app shows file tree + token gauge in this slot; ours is more agent-focused. A stack of togglable panels (cycle with `Tab` while the right pane is focused):
+
+- **Todo** (default) — checklist for the active session. User-editable. Optionally synced from a tool program's state (e.g., `autopilot` writes its plan here so the user can see what's queued).
+- **Files** — files claude has read / edited / created in this session, with action + last-touched timestamp. Derived from observed `tool_use` events.
+- **Tool status** — when a tool program is running: name · iteration counter · current step · max-turns budget remaining · last decision.
+- **Budget** — input / output / cache-creation / cache-read tokens for the session, $ cost, rate-limit window with reset countdown.
+- **Session** — model · permission-mode · cwd · session uuid · log path · started_at.
+
+Each panel is a small Bubble Tea sub-model under `internal/ui/contextpane/`. Reference notebook-cli at `~/Developer/notebook/internal/ui/picker.go` for the layout-pinning pattern (height stays constant as content changes — important so panel toggles don't reflow the screen).
+
+## `/commands` palette — Phase 2
+
+When the composer's first character is `/`, a Picker overlay opens anchored above the composer. Filter by typing more characters; ⏎ runs the selected command; esc closes; backspace at empty closes too.
+
+Two command categories rendered with a leading icon:
+
+1. `▸ jflow commands` — invoke harness features:
+   - `/tool <name>` — start a tool-driven session in the current workspace
+   - `/workspace open <path>` / `/workspace new` / `/workspace ls`
+   - `/session export` — write current transcript to markdown
+   - `/session new` — manual chat session in current workspace
+   - `/session resume <name>` — pick a prior session
+   - `/compact-now` — force compaction (in-place by default)
+   - `/handoff` — force a handoff (close current claude session, spawn fresh with brief)
+   - `/panel <name>` — switch right-pane panel (todo · files · tool · budget · session)
+   - `/help` — open the help overlay
+   - `/quit`
+2. `◇ claude commands` — pass-through. Anything starting with `/` matching a known claude slash command (from the `system/init.slash_commands[]` list jflow already receives) is sent verbatim to claude as a user message: `/compact`, `/clear`, `/init`, `/review`, `/security-review`, etc.
+
+Implementation: copy notebook-cli's `~/Developer/notebook/internal/ui/picker.go` Picker pattern verbatim (it already handles fuzzy filter, scroll indicators, height pinning, word-delete, and esc-to-close edge cases). Wrap it in a thin adapter that knows about both command sources and dispatches to `App.Update` as a typed `commandRunMsg`.
