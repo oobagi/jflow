@@ -26,21 +26,22 @@ Putting the orchestration in code means:
 
 ## What success looks like
 
-A user runs `jflow` (or `jflow run autopilot` for headless), gets a Codex-style three-pane TUI:
-- **Workspaces** (left) — directories the user has worked in
-- **Sessions** (middle) — each session is a run of one tool, or a manual chat
-- **Active session** (right) — scrolling transcript with thinking blocks, inline tool calls, and a multiline composer
+A user runs `jflow` (or `jflow run autopilot` for headless), gets a three-pane TUI:
+- **Workspaces** (left) — cwd-keyed groupings with sessions nested under each
+- **Chat** (center) — streaming transcript with thinking blocks, inline tool calls, and a multiline composer
+- **Todo** (right) — flat list with an active indicator. The model edits it via a bundled MCP server; the user edits it directly. The active item shows in the chat header as `▸ working on: <title>`.
 
 The user can:
-- type freely into the composer mid-flight (sent via stream-json input)
+- type freely into the composer mid-flight (sent as the next user message)
 - see token / context-window % live in the status bar
-- press `c` to force a compaction now
+- press `⌃K` to force a compaction now
 - press `t` to start a new tool-driven session in the current workspace
+- focus the right pane and queue todos for the agent (or send a highlighted todo to the chat with `s`)
 - watch `jflow autopilot` chew through 10 GitHub issues without context bloat because the harness opens a fresh session per issue with a structured handoff
 
 ## Where this lives
 
-This new harness lives in the **same `~/.jflow` repo** as today's skills. The skill bundle stays during transition (so `/jflow` inside Claude Code keeps working), but the `SKILL.md` files become thin shims that shell out to the Go binary. Eventually we deprecate the skill shims and users run `jflow` directly from their terminal.
+This new harness lives in the **same `~/.jflow` repo** as today's skills. The jflow suite (`autopilot`, `next`, `ship`, `polish`, `qa`, `release`, `jflow`, `setup`, `issue`) gets ported into Go tool programs that the binary runs. The other skills (`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`) stay as Claude Code skills — they're standalone utilities and don't need a harness around them.
 
 ## Tech stack (locked, mirrors `~/Developer/notebook`)
 
@@ -62,3 +63,4 @@ This new harness lives in the **same `~/.jflow` repo** as today's skills. The sk
 - `06-cost-and-bare-mode.md` — why `--bare` matters for tool sessions
 - `07-build-order.md` — phased plan, what v0/v1/v2 each contain
 - `08-open-questions.md` — verifications still owed
+- `09-meta-model.md` — cheap-Sonnet meta-loop for harness-side orchestration decisions

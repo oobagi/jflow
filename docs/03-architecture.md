@@ -36,19 +36,23 @@
 │   │   └── defaults.go                per-tool defaults (compactAt, maxTurns, model, effort, allowedTools)
 │   ├── ui/
 │   │   ├── app.go                     root bubbletea model; pane router
-│   │   ├── workspace_list.go          left pane
-│   │   ├── session_list.go            middle pane
-│   │   ├── session_view.go            right pane (transcript + composer + status)
+│   │   ├── workspace_list.go          left pane (workspaces + sessions nested)
+│   │   ├── session_view.go            center pane (transcript + composer + status + banner)
+│   │   ├── todopane/                  right pane — flat todo list with active indicator
 │   │   ├── transcript.go              renders text/thinking/tool_use blocks
 │   │   ├── composer.go                multiline input; pushes to driver stdin
 │   │   ├── statusbar.go               model | tokens/ctx | $cost | rate limit | mode
+│   │   ├── banner.go                  chat header — tool · model · cwd + ▸ working on: <todo>
 │   │   ├── theme.go                   lipgloss styles (dark/light)
 │   │   ├── keys.go                    keybindings + help generation
 │   │   └── help.go
+│   ├── mcp/
+│   │   └── todo/                      bundled MCP server: todo_list/add/set_active/complete/...
+│   ├── meta/                          cheap-Sonnet meta-loop (see docs/09-meta-model.md)
 │   └── storage/
 │       └── paths.go                   resolve ~/.jflow/state/, ~/.jflow/config.toml
 ├── fork/bubbles/                      only if we end up patching, mirrors notebook
-├── skills/                            EXISTING — kept during transition; SKILL.md becomes shim
+├── skills/                            EXISTING — non-jflow-suite skills stay here as Claude Code skills
 ├── agents/                            EXISTING
 ├── hooks/                             EXISTING
 ├── settings/                          EXISTING
@@ -64,7 +68,7 @@
 - `internal/claude/` is the *only* place that knows how to spawn `claude`. Everything else talks to it through events on a channel + an outbound message channel. This is the seam that makes the harness testable (we can fake the driver in tests).
 - `internal/tool/` has one subpackage per ported skill. Each is small (~200 lines) — the heavy lifting is in `internal/claude` and `internal/session`.
 - `internal/ui/` is bubbletea; doesn't import `internal/claude` directly — it talks to `session` which proxies the driver. Keeps view code free of subprocess/IO concerns.
-- `skills/` stays put for the transition. After v2 we might move shims into a `shims/` dir.
+- `skills/` stays put. The jflow suite (`autopilot`, `next`, `ship`, `polish`, `qa`, `release`, `jflow`, `setup`, `issue`) gets ported into `internal/tool/<name>/`; the standalone skills (`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`) stay as Claude Code skills — they don't need a harness.
 
 ## The Tool interface
 

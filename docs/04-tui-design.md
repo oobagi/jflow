@@ -95,7 +95,6 @@ A user can type during a streaming assistant turn — their message queues and i
 | `^C` | interrupt current claude turn |
 | `^K` | compact now |
 | `^L` | clear screen redraw |
-| `^E` | export current session as markdown |
 | `g/G` | top / bottom of transcript |
 
 ## Theme
@@ -129,35 +128,60 @@ For v0 we skip workspaces and sessions entirely. The TUI starts directly into th
 
 Once that works end-to-end, we add the three-pane chrome around it.
 
-## Right-pane (context) — Phase 2
+## Right-pane (todo) — Phase 2
 
-The right pane is for *side-information* that supports the active session without cluttering the transcript. Codex-app shows file tree + token gauge in this slot; ours is more agent-focused. A stack of togglable panels (cycle with `Tab` while the right pane is focused):
+**One opinionated thing**: a flat todo list with an active indicator. The model and the user both edit this list. It's the harness's "ticket queue" UX — user queues work for the agent, agent reports progress back via MCP.
 
-- **Todo** (default) — checklist for the active session. User-editable. Optionally synced from a tool program's state (e.g., `autopilot` writes its plan here so the user can see what's queued).
-- **Files** — files claude has read / edited / created in this session, with action + last-touched timestamp. Derived from observed `tool_use` events.
-- **Tool status** — when a tool program is running: name · iteration counter · current step · max-turns budget remaining · last decision.
-- **Budget** — input / output / cache-creation / cache-read tokens for the session, $ cost, rate-limit window with reset countdown.
-- **Session** — model · permission-mode · cwd · session uuid · log path · started_at.
+```
+┌─ todo ──────────────────────────────────────┐
+│ [x]  Read failing test                      │
+│ ▸    Patch isEmail regex for + in local     │
+│ [ ]  Run npm test                           │
+│ [ ]  Open PR with changelog entry           │
+│ [ ]  Reply on issue #41                     │
+│                                             │
+│ a add · e edit · ⏎ activate · space done    │
+└─────────────────────────────────────────────┘
+```
 
-Each panel is a small Bubble Tea sub-model under `internal/ui/contextpane/`. Reference notebook-cli at `~/Developer/notebook/internal/ui/picker.go` for the layout-pinning pattern (height stays constant as content changes — important so panel toggles don't reflow the screen).
+Rendering:
+- `[ ]` pending · `▸` active (one at a time) · `[x]` done
+- The active item title also appears in the chat header as `▸ working on: <title>` so the user always knows what the worker is on
+- Height is pinned (notebook-cli `picker.go` pattern) so adding/removing items never reflows the chat
 
-## `/commands` palette — Phase 2
+Keybinds when the right pane is focused:
 
-When the composer's first character is `/`, a Picker overlay opens anchored above the composer. Filter by typing more characters; ⏎ runs the selected command; esc closes; backspace at empty closes too.
+| key | action |
+| --- | --- |
+| `j/k` `↓/↑` | move cursor |
+| `⏎` | set highlighted item active (clears any prior active) |
+| `space` | toggle done/pending |
+| `a` | add new todo (inline input) |
+| `e` | edit highlighted todo |
+| `d` | delete highlighted todo |
+| `s` | send highlighted todo to chat as the next user message |
 
-Two command categories rendered with a leading icon:
+State: per-session JSON in `~/.jflow/state/sessions/<uuid>.json` under a `todos[]` array. The right-pane Bubble Tea sub-model (`internal/ui/todopane/`) and the bundled MCP server (`internal/mcp/todo/`) read and write the same file — single source of truth.
 
-1. `▸ jflow commands` — invoke harness features:
-   - `/tool <name>` — start a tool-driven session in the current workspace
-   - `/workspace open <path>` / `/workspace new` / `/workspace ls`
-   - `/session export` — write current transcript to markdown
-   - `/session new` — manual chat session in current workspace
-   - `/session resume <name>` — pick a prior session
-   - `/compact-now` — force compaction (in-place by default)
-   - `/handoff` — force a handoff (close current claude session, spawn fresh with brief)
-   - `/panel <name>` — switch right-pane panel (todo · files · tool · budget · session)
-   - `/help` — open the help overlay
-   - `/quit`
-2. `◇ claude commands` — pass-through. Anything starting with `/` matching a known claude slash command (from the `system/init.slash_commands[]` list jflow already receives) is sent verbatim to claude as a user message: `/compact`, `/clear`, `/init`, `/review`, `/security-review`, etc.
+### Model side: bundled MCP server
 
-Implementation: copy notebook-cli's `~/Developer/notebook/internal/ui/picker.go` Picker pattern verbatim (it already handles fuzzy filter, scroll indicators, height pinning, word-delete, and esc-to-close edge cases). Wrap it in a thin adapter that knows about both command sources and dispatches to `App.Update` as a typed `commandRunMsg`.
+When `jflow` spawns `claude -p` it auto-registers a small MCP server exposing:
+
+- `todo_list()` — array of `{id, title, status: "pending"|"active"|"done"}`
+- `todo_add(title)` — returns id
+- `todo_set_active(id)` — clears any prior active
+- `todo_complete(id)`
+- `todo_delete(id)`
+- `todo_update(id, title)`
+
+A short system-prompt addendum tells the worker: *"You are running under jflow. Use `todo_*` to plan and track your work. The user can see and edit this list in real time."*
+
+`todo_*` calls render as a thin `✓ todo_add("…")` line in the transcript — bookkeeping, not work.
+
+### What lives elsewhere
+
+The togglable-panels grab-bag from earlier drafts (files / tool-status / budget / session) is cut. That information surfaces in the status bar (tokens, cost, model, mode) or via dedicated keybinds rather than competing with the todo list.
+
+## Slash commands
+
+Slash command pass-through (the `/commands` palette concept) was cut from MVP. Users can still type `/compact` directly into the composer if they want claude's built-in command, but the harness owns its own controls via dedicated keybinds (`⌃K` compact now, `⌃X` interrupt) rather than a palette overlay.

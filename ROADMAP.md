@@ -1,12 +1,24 @@
 # jflow — roadmap
 
-Status of the rewrite from skill-bundle → Go CLI/TUI harness for the `claude` CLI. The detailed design and verification work lives in [`docs/`](docs/) — this file is the running checklist.
+Status of the rewrite from skill-bundle → Go CLI/TUI harness for the `claude` CLI. Detailed design lives in [`docs/`](docs/) — this file is the running checklist.
 
 Legend: `[x]` done · `[~]` in progress · `[ ]` not started
 
 ---
 
-## Phase 0 — verification
+## What we're building (MVP)
+
+A three-pane TUI harness that drives `claude -p` as a subprocess:
+
+- **Left:** workspaces (cwd-keyed) with sessions nested under each
+- **Center:** chat — streaming transcript, composer, status bar
+- **Right:** flat todo list with an active indicator. The model edits it via a bundled MCP server; the user edits it directly. Hitting `⏎` on a todo sets it active and the chat header shows `▸ working on: <todo>`.
+
+The point of the harness: own context budget, compaction, and roadmap looping so the worker session stays focused. Old `jflow`-suite skills (`autopilot`, `next`, `ship`, `polish`, `qa`, `release`, `jflow`, `setup`, `issue`) get ported to deterministic Go tool programs that orchestrate `claude -p` invocations. Other skills (`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`) stay as Claude Code skills — they don't need a harness.
+
+---
+
+## Phase 0 — verification (DONE)
 
 - [x] live `claude -p --output-format stream-json` capture
 - [x] CLI flag reference + cost finding ($0.20 cold start, 33k cache-creation tokens)
@@ -17,104 +29,93 @@ Legend: `[x]` done · `[~]` in progress · `[ ]` not started
 
 Working today:
 - [x] Go module + cobra root (`jflow` binary, `jflow --version`, `jflow --debug`)
-- [x] `internal/claude` driver: spawns `claude -p --resume <uuid>` per turn, decodes JSONL into typed Go events (envelope, system, stream_event, assistant, user, rate_limit, result, hook_*, parse error, exit)
+- [x] `internal/claude` driver: spawns `claude -p --resume <uuid>` per turn, decodes JSONL into typed Go events
 - [x] Bubble Tea v2 single-pane TUI: transcript + composer + status bar
 - [x] Streaming render: text / thinking / tool_use blocks with distinct styling
 - [x] Status bar: model · permission-mode · tokens used / contextWindow (%) · running cost · rate-limit chip
 - [x] Per-turn driver lifecycle (one fresh `claude -p` per user enter, same `--session-id`/`--resume <uuid>`)
-- [x] Always-on session log → `~/.jflow/state/logs/<ts>-<sid8>.jsonl` + `last.jsonl` symlink (raw JSONL stream + `_jflow` meta entries)
+- [x] Always-on session log → `~/.jflow/state/logs/<ts>-<sid8>.jsonl` + `last.jsonl` symlink
 - [x] `--debug` flag adds verbose key-event meta entries
 - [x] Word-wrap with prefix-aware hanging indent (`internal/ui/wrap.go`, 5 unit tests)
 - [x] Stdin redirected to `/dev/null` so claude doesn't print the 3s "no stdin data" warning
 - [x] Wired keybinds: `⏎` send · `⌃J` newline · `⌃X` interrupt · `⌃K` send `/compact` · `esc`/`⌃C` quit (or interrupt if claude is mid-turn)
 
 Still missing in Phase 1:
-- [ ] **Transcript scroll** — arrow keys currently move the textarea cursor; no way to look back. Wrap the transcript output in `charm.land/bubbles/v2/viewport` and route ↑/↓/PgUp/PgDn there.
-- [ ] **`?` help overlay** — listed in the design but the binding isn't wired
-- [ ] **`⌃E` export current session as markdown**
-- [ ] **`⌃L` redraw / clear**
-- [ ] **Up-arrow on empty composer = previous-message recall**
-- [ ] **Banner / header with model + cwd + session uuid** (currently only the dim system-note shows it)
-- [ ] **Better visibility into hook events** — they're written to the log but suppressed in the TUI; non-`--bare` sessions emit four `SessionStart` hooks per turn
-- [ ] **Tool result rendering** — when claude executes a tool internally (Bash/Read/Edit), we render the `tool_use` call but don't yet render the matching `tool_result` block
+- [ ] **Transcript scroll** (#25) — viewport for ↑/↓/PgUp/PgDn
+- [ ] **`?` help overlay** (#26)
+- [ ] **`⌃L` redraw / clear** (#28)
+- [ ] **Up-arrow on empty composer = previous-message recall** (#29)
+- [ ] **Banner / header with model + cwd + session uuid** (#30)
+- [ ] **Tool result rendering** (#31) — render `tool_result` blocks paired with their `tool_use`
 
-## Phase 2 — workspaces + sessions persistence + 3-pane shell
+## Phase 2 — workspaces + sessions + three-pane shell + todo pane
 
-Codex-app-inspired layout: **workspaces (left) · chat (center) · context (right)**.
-
-- [ ] `internal/workspace/` — cwd-keyed registry, `~/.jflow/state/workspaces.json`
-- [ ] `internal/session/` — per-session state (transcript, usage, status), `~/.jflow/state/sessions/<uuid>.json`
-- [ ] Three-pane TUI shell — left: workspaces with sessions nested · center: chat (current Phase 1 view) · right: context
-- [ ] **Right-pane (context)** — togglable panels: todo · files touched · tool status · token/budget breakdown · session metadata. See [`docs/04-tui-design.md`](docs/04-tui-design.md#right-pane-context--phase-2).
-- [ ] **`/commands` palette** — type `/` in the composer to open a notebook-style Picker. Filterable list of jflow commands (`/tool autopilot`, `/workspace open`, `/session export`, `/compact-now`, …) plus pass-through to claude slash commands (`/compact`, `/clear`). See [`docs/04-tui-design.md`](docs/04-tui-design.md#commands-palette--phase-2).
+- [ ] `internal/workspace/` — cwd-keyed registry, `~/.jflow/state/workspaces.json` (#32)
+- [ ] `internal/session/` — per-session state (transcript, usage, status, todos), `~/.jflow/state/sessions/<uuid>.json` (#33)
+- [ ] Three-pane TUI shell — workspaces · chat · todo (#34)
+- [ ] **Right-pane todo list** — flat list, active indicator, user keybinds for add/edit/done/send-to-chat (#35)
+- [ ] **Bundled MCP server** exposing `todo_*` tools to the worker (#70) — model and user share one source of truth
 - [ ] `jflow workspace ls|add|rm`
-- [ ] `jflow session ls|export|rm`
+- [ ] `jflow session ls|archive|rm`
 - [ ] Resume any prior session by id or name (uses claude's `--resume`)
-- [ ] Session list shows cost / tokens / last-active per row
 
 ## Phase 3 — first tool program: `autopilot`
 
-- [ ] `internal/tool/` — `Tool` interface (Prepare / NextPrompt / OnEvent / HandoffSummary)
-- [ ] `internal/tool/manual/` — explicit no-op tool for manual chat
-- [ ] `internal/tool/autopilot/` — port of `skills/autopilot/SKILL.md`
-- [ ] `internal/session/compact.go` — `in-place` (`/compact`), `handoff` (close + spawn fresh with brief), `fork` (`--fork-session`)
-- [ ] `cmd/run.go` — `jflow run autopilot` headless mode
-- [ ] TUI tool picker on `t`
-- [ ] Per-tool config in `~/.jflow/config.toml` (compact_at, max_turns, model, allowed_tools)
+- [ ] `internal/tool/` — `Tool` interface (Prepare / NextPrompt / OnEvent / HandoffSummary) (#37)
+- [ ] `internal/session/compact.go` — `in-place` (`/compact`), `handoff`, `fork` strategies (#38)
+- [ ] `cmd/run.go` — `jflow run autopilot` headless mode (#39)
+- [ ] `internal/tool/autopilot/` — port of `skills/autopilot/SKILL.md` (#40)
+- [ ] Per-tool config in `~/.jflow/config.toml` (`compact_at`, `max_turns`, `model`, `allowed_tools`)
+- [ ] **Meta-model loop** — cheap Sonnet calls for "is the worker stuck?" / "grade this output" decisions (see [`docs/09-meta-model.md`](docs/09-meta-model.md))
 
-## Phase 4 — port the rest of the skills
+## Phase 4 — port the rest of the jflow suite
 
 In rough order of value:
-- [ ] `next` — pick + work one item
-- [ ] `ship` — branch, commit, PR, merge, cleanup
-- [ ] `polish` — simplify → harden → test → ship pipeline
-- [ ] `qa` — feature testing
-- [ ] `release` — preview/production releases
-- [ ] `jflow` (the onboarding interview)
-- [ ] `setup` — project scaffolding
-- [ ] `issue` — GitHub issue authoring
-- [ ] `simplify`, `harden`, `test`, `docs`, `checkup`, `sitrep`, `design`, `scrape-design`
+- [ ] `next` (#41) — pick + work one item
+- [ ] `ship` (#42) — branch, commit, PR, merge, cleanup
+- [ ] `polish` (#43) — pipeline (composes existing Claude Code skills for simplify/harden/test phases)
+- [ ] `qa` (#44) — feature testing
+- [ ] `release` (#45) — preview/production releases
+- [ ] `jflow` (#46) — onboarding interview
+- [ ] `setup` (#47) — project scaffolding
+- [ ] `issue` (#48) — GitHub issue authoring
 
-## Phase 5 — skill shims
+`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design` stay as Claude Code skills — they're standalone utilities and don't need a harness around them.
 
-- [ ] Each `skills/<name>/SKILL.md` becomes a thin shell-out to `jflow run <name>` so `/jflow` inside Claude Code keeps working during transition
+## Phase 5 — install / release
 
-## Phase 6 — install / release
-
-- [ ] `install.sh` updated to also `go install ./cmd/jflow/`
-- [ ] `goreleaser.yml` (mirroring notebook) for binary releases
-- [ ] `upgrade-jflow` skill becomes `jflow upgrade`
-- [ ] Embed VERSION via `-ldflags`
-
-## Phase 7 — agentic features
-
-- [ ] `--input-format stream-json` mid-flight user injection (open question #8 in `docs/08-open-questions.md`)
-- [ ] `--include-hook-events` rendering for non-bare sessions
-- [ ] Workspace-wide search across transcripts
-- [ ] "Branch from message N" via `--fork-session`
-- [ ] Agent-team integration (`--teammate-mode`, `--agents`)
-- [ ] Web companion (`--remote` / `--teleport` to claude.ai web)
+- [ ] `install.sh` builds and installs the Go binary (#58)
+- [ ] `goreleaser.yml` + GitHub release workflow (#59)
+- [ ] `jflow upgrade` subcommand (#60)
+- [ ] Embed VERSION via `-ldflags` (#61)
 
 ---
 
-## Open verification questions (from `docs/08-open-questions.md`)
+## Open verification questions (#68)
 
-Things I've designed around but haven't yet *observed* end-to-end:
+Things designed around but not yet *observed* end-to-end. A `scripts/probe-stream.sh` capturing each scenario into `docs/probes/<name>.jsonl` is the way to retire these.
 
-- [ ] Exact JSONL shape for `--input-format=stream-json` user messages
 - [ ] `thinking_delta` field name (`thinking` vs `text`)
-- [ ] `tool_use` `content_block_start` shape (id/name siblings to type)
+- [ ] `tool_use` `content_block_start` shape
 - [ ] `tool_result` event shape
-- [ ] `/compact` semantics in stream-json output (is there a discrete event?)
+- [ ] `/compact` semantics in stream-json output
 - [ ] Full enum of `result.terminal_reason` and `result.subtype`
 - [ ] `--max-turns` exit-code + matching `result` event shape
-- [ ] `--fork-session` behavior in stream
 - [ ] Permission-prompt path when `permission-mode=default` and a tool needs approval
 
-A `scripts/probe-stream.sh` that captures each scenario into `docs/probes/<name>.jsonl` is the natural way to retire these.
+---
+
+## Out of scope
+
+Closed during the spring-2026 cleanup; reopen if scope grows:
+
+- Markdown export of sessions, `/commands` palette, claude slash-command pass-through
+- Skill shims (the Claude Code skills stay as primary entry points for the non-jflow-suite commands)
+- Phase 4 ports of `simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`
+- All former Phase 7 items: stream-json mid-flight injection, hook-events rendering, transcript search, fork-session, agent-team integration, web companion
 
 ---
 
 ## How to read this
 
-If something works, it's listed under Phase 1 with `[x]`. Everything else is honest about not being done. The ROADMAP at the root is the source of truth; deeper rationale lives in [`docs/07-build-order.md`](docs/07-build-order.md) and [`docs/08-open-questions.md`](docs/08-open-questions.md).
+If something works, it's listed under Phase 1 with `[x]`. Everything else is honest about not being done. Deeper rationale lives in [`docs/07-build-order.md`](docs/07-build-order.md) and [`docs/08-open-questions.md`](docs/08-open-questions.md).
