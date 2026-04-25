@@ -18,9 +18,31 @@ If the project has a lint script, run it. If the project has a build script, run
 
 Run `git status` and `git diff --stat` to see what changed. Review the changes to understand what's being shipped.
 
+**Dirty-tree guard (critical):** If `git status --porcelain` lists files that are *not* part of what the user is asking you to ship (e.g. unrelated edits to skill files, config, notes, or work-in-progress in other modules), STOP and ask how to handle them:
+- **(a) Include** them in this ship (if they belong)
+- **(b) Stash** them (`git stash push -m "pre-ship: unrelated WIP"`) and restore after merge
+- **(c) Commit separately** on a different branch first
+- **(d) Abort**
+
+**Never** use `git reset --hard`, `git checkout --`, `git clean -f`, or `git restore --source` to "clean up" the tree before branching. Those commands destroy uncommitted work — and orphaned edits on `main` are work. If you need a clean tree, stash; never reset.
+
+## 2.5. Identify the issue(s) being shipped
+
+**Do this before writing any commit or PR text.** Missing `Closes #N` is the single most common way shipped work stays marked open on the roadmap.
+
+Run `gh issue list --state open --limit 50 --json number,title,labels` and match the current work against open issues by title, scope, and keywords. Also check:
+
+- Branch name (e.g. `fix/72-add-chord-flow` → #72)
+- Existing commit messages on the branch (`git log main..HEAD --oneline`)
+- Files touched vs. issue descriptions
+
+If one or more open issues clearly match, note their numbers — they go in the PR title as `(Closes #N)` and in the commit as `Fix #N:`. Multiple issues: `(Closes #18, Closes #19)`.
+
+If the match is ambiguous, ask the user which issue(s) this ships before opening the PR. Do not guess silently. If no issue matches (genuinely new work), proceed without a `Closes` reference.
+
 ## 3. Create branch and commit
 
-If already on a feature branch (not `main` or `master`), skip branch creation. Otherwise, create a descriptive branch from the main branch (e.g., `fix/play-pause-ui-state`, `feat/wasd-controls`).
+If already on a feature branch (not `main` or `master`), skip branch creation. Otherwise, create a descriptive branch *from the current HEAD* (do NOT `git checkout main && git reset --hard origin/main` — that wipes any uncommitted edits in the working tree). Name it descriptively (e.g., `fix/play-pause-ui-state`, `feat/wasd-controls`).
 
 Stage all relevant files (do NOT use `git add -A` — be selective, avoid committing .env, .db files, or other artifacts).
 
@@ -50,7 +72,7 @@ Push the branch with `git push -u origin <branch>`.
 
 Create a PR with `gh pr create`.
 
-The PR title should include `(Closes #N)` when implementing or fixing an issue — e.g., `feat: add WASD controls (Closes #42)`. This auto-closes the issue on merge.
+The PR title **must** include `(Closes #N)` for every issue identified in step 2.5 — e.g., `feat: add WASD controls (Closes #42)` or `feat: mods overlays (Closes #18, Closes #19)`. GitHub only auto-closes issues whose numbers appear with a closing keyword (`Closes`, `Fixes`, `Resolves`) in the merged PR title or body. Putting the number in the body without the keyword does nothing.
 
 The PR body should include:
 
