@@ -234,6 +234,14 @@ func decodeToolResultContent(raw json.RawMessage) string {
 	return ""
 }
 
+// ParseLine decodes one JSONL line from a stream-json log. Returns a typed
+// Event for known claude payloads. Lines whose type is unknown (e.g. a jflow
+// `_jflow:` meta entry) return (nil, nil) so callers can skip them without
+// treating it as a parse failure.
+func ParseLine(line []byte) (Event, error) {
+	return parseLine(line)
+}
+
 func parseLine(line []byte) (Event, error) {
 	var env Envelope
 	if err := json.Unmarshal(line, &env); err != nil {
