@@ -28,6 +28,12 @@ type Block struct {
 	ToolArgs  string // streamed partial JSON, prettified at stop
 	Sealed    bool   // false while streaming, true after stop
 	StreamIdx int    // matches stream_event index for content blocks
+
+	// ToolResult carries the matching `tool_result` payload once claude
+	// finishes executing the tool. Only set on BlockToolUse blocks.
+	ToolResult    string
+	ToolResultErr bool
+	HasToolResult bool
 }
 
 // Transcript holds the ordered list of blocks for the current session.
@@ -49,6 +55,23 @@ func (t *Transcript) AddSystemNote(text string) {
 // previous block with no blank separator above it.
 func (t *Transcript) AddTiming(text string) {
 	t.Blocks = append(t.Blocks, &Block{Kind: BlockTiming, Text: text, Sealed: true})
+}
+
+// AttachToolResult finds the tool_use block with the matching ID and
+// records the result payload on it, to be rendered as a dim footer.
+func (t *Transcript) AttachToolResult(toolUseID, text string, isErr bool) {
+	if toolUseID == "" {
+		return
+	}
+	for i := len(t.Blocks) - 1; i >= 0; i-- {
+		b := t.Blocks[i]
+		if b.Kind == BlockToolUse && b.ToolID == toolUseID {
+			b.ToolResult = text
+			b.ToolResultErr = isErr
+			b.HasToolResult = true
+			return
+		}
+	}
 }
 
 // OnContentBlockStart starts a new streaming block keyed by stream index.
@@ -159,6 +182,9 @@ func (t *Transcript) Render(theme Theme, width int) string {
 				for _, p := range strings.Split(body, "\n") {
 					lines = append(lines, theme.ToolBody.Render("│ "+p))
 				}
+			}
+			if b.HasToolResult {
+				lines = append(lines, renderToolResultFooter(theme, b.ToolResult, b.ToolResultErr, width)...)
 			}
 		case BlockSystem:
 			body := wrapWithPrefix(b.Text, "· ", "  ", width)

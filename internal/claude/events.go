@@ -13,6 +13,7 @@ type Envelope struct {
 	Event           json.RawMessage `json:"event,omitempty"`
 	Message         json.RawMessage `json:"message,omitempty"`
 	RateLimitInfo   *RateLimitInfo  `json:"rate_limit_info,omitempty"`
+	ToolUseResult   *ToolUseResult  `json:"tool_use_result,omitempty"`
 
 	HookID    string `json:"hook_id,omitempty"`
 	HookName  string `json:"hook_name,omitempty"`
@@ -92,11 +93,37 @@ type StreamEvent struct {
 }
 
 type ContentBlock struct {
-	Type  string          `json:"type"` // "text" | "thinking" | "tool_use"
+	Type  string          `json:"type"` // "text" | "thinking" | "tool_use" | "tool_result"
 	Text  string          `json:"text,omitempty"`
 	ID    string          `json:"id,omitempty"`
 	Name  string          `json:"name,omitempty"`
 	Input json.RawMessage `json:"input,omitempty"`
+
+	// tool_result fields. Content can be a plain string or an array of
+	// {type:text|image, ...} parts; we keep it as RawMessage so callers can
+	// decode whichever shape arrives.
+	ToolUseID string          `json:"tool_use_id,omitempty"`
+	Content   json.RawMessage `json:"content,omitempty"`
+	IsError   bool            `json:"is_error,omitempty"`
+}
+
+// ToolUseResult is the side-channel block claude attaches to a `user`
+// event when a tool finishes executing. Carries the raw stdout/stderr in
+// addition to the model-visible `content` field.
+type ToolUseResult struct {
+	Stdout           string `json:"stdout,omitempty"`
+	Stderr           string `json:"stderr,omitempty"`
+	Interrupted      bool   `json:"interrupted,omitempty"`
+	IsImage          bool   `json:"isImage,omitempty"`
+	NoOutputExpected bool   `json:"noOutputExpected,omitempty"`
+}
+
+// UserMsg is the body of a `{"type":"user", ...}` envelope. When claude
+// runs a tool, the result comes back as a user-role message whose content
+// holds one or more `tool_result` blocks keyed by tool_use_id.
+type UserMsg struct {
+	Role    string         `json:"role"`
+	Content []ContentBlock `json:"content"`
 }
 
 // ContentDelta covers all delta variants in stream_event.event.delta.
@@ -200,6 +227,20 @@ func (AssistantSnapshot) isEvent() {}
 type UserEcho struct{ Text string }
 
 func (UserEcho) isEvent() {}
+
+// ToolResult is emitted when a `user`-role event carries a tool_result
+// content block — i.e. claude finished running a tool and the harness
+// is feeding the output back to the model. ToolUseID matches the ID on
+// the originating tool_use block so the UI can attach it as a footer.
+type ToolResult struct {
+	ToolUseID string
+	Text      string // best-effort textual content; empty for image results
+	IsError   bool
+	Stdout    string
+	Stderr    string
+}
+
+func (ToolResult) isEvent() {}
 
 type RateLimit struct{ Info RateLimitInfo }
 

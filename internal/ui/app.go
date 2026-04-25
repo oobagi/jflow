@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/google/uuid"
 
@@ -67,10 +67,10 @@ type App struct {
 
 	// Debug logging: always-on raw JSONL log + jflow meta entries.
 	// `--debug` adds extra meta entries (key presses, etc.).
-	debug      bool
-	logFile    *os.File
-	logPath    string
-	jflowVer   string
+	debug    bool
+	logFile  *os.File
+	logPath  string
+	jflowVer string
 
 	// In-memory history of user sends for ↑/↓ recall (#29). Current-session
 	// only — cross-session recall is out of scope for v0. Pointer semantics:
@@ -435,7 +435,8 @@ func (a *App) send(text string) tea.Cmd {
 
 // composerRule builds the dim `─` rule above the composer with the current
 // worktree path and branch embedded near the left edge — like:
-//   ── ~/.jflow · main ──────────────────
+//
+//	── ~/.jflow · main ──────────────────
 func (a *App) composerRule(width int) string {
 	if width < 1 {
 		width = 1
@@ -599,6 +600,19 @@ func (a *App) applyEvent(ev claude.Event) {
 	case claude.UserEcho:
 		// only fires with --replay-user-messages; v0 does not enable that flag
 
+	case claude.ToolResult:
+		text := e.Text
+		if text == "" && e.Stdout != "" {
+			text = e.Stdout
+		}
+		if e.IsError && e.Stderr != "" {
+			if text != "" {
+				text += "\n"
+			}
+			text += e.Stderr
+		}
+		a.transcript.AttachToolResult(e.ToolUseID, text, e.IsError)
+
 	case claude.RateLimit:
 		if e.Info.IsUsingOverage {
 			a.rateState = "overage"
@@ -740,11 +754,16 @@ func (a *App) View() tea.View {
 		transcriptH = 3
 	}
 
+	// Capture wasAtBottom before resize: when the help sheet opens or the
+	// composer grows, transcriptH shrinks. The previous scroll offset is no
+	// longer at the bottom of the smaller viewport, so AtBottom() reads false
+	// post-resize and the latest messages stay hidden behind the composer/sheet.
+	// Reading first lets GotoBottom() fire below.
+	wasAtBottom := a.viewport.AtBottom()
 	if a.viewport.Height() != transcriptH || a.viewport.Width() != innerCenterW {
 		a.viewport.SetWidth(innerCenterW)
 		a.viewport.SetHeight(transcriptH)
 	}
-	wasAtBottom := a.viewport.AtBottom()
 	tc := a.transcript.Render(a.theme, innerCenterW)
 	// Bottom-anchor the transcript so the welcome note and the first few
 	// messages sit just above the composer rather than floating at the top
