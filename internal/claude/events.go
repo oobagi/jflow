@@ -228,6 +228,9 @@ func (ParseError) isEvent() {}
 
 type DriverExit struct {
 	Err error
+	// Stderr is a tail (~1KB) of the subprocess's stderr, surfaced only when
+	// Err is non-nil. Empty on clean exits.
+	Stderr string
 }
 
 func (DriverExit) isEvent() {}

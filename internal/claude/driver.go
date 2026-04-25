@@ -2,6 +2,7 @@ package claude
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
+	"sync"
 )
 
 // SpawnOpts configures a single `claude -p` invocation.
@@ -46,6 +49,12 @@ type Driver struct {
 	stdinSink io.Closer // /dev/null handle (v0); becomes a real pipe in v0.5
 	logWriter io.Writer
 	argv      []string
+
+	// stderr captures the subprocess's stderr stream so it doesn't leak into
+	// the TUI's alt-screen. The tail is surfaced via DriverExit when the
+	// process exits with an error.
+	stderrMu  sync.Mutex
+	stderrBuf bytes.Buffer
 }
 
 // Argv returns the full argument list passed to the claude subprocess
@@ -119,11 +128,6 @@ func Spawn(ctx context.Context, opts SpawnOpts) (*Driver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("stdout pipe: %w", err)
 	}
-	cmd.Stderr = os.Stderr // visible in dev; later: capture into a buffer
-	if err := cmd.Start(); err != nil {
-		return nil, fmt.Errorf("start claude: %w", err)
-	}
-
 	d := &Driver{
 		SessionID: opts.SessionID,
 		cmd:       cmd,
@@ -132,8 +136,25 @@ func Spawn(ctx context.Context, opts SpawnOpts) (*Driver, error) {
 		logWriter: opts.LogWriter,
 		argv:      append([]string{"claude"}, args...),
 	}
+	cmd.Stderr = &lockedWriter{mu: &d.stderrMu, w: &d.stderrBuf}
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("start claude: %w", err)
+	}
 	go d.read(stdout)
 	return d, nil
+}
+
+// lockedWriter serializes writes from the subprocess's stderr goroutine
+// with reads done from the main TUI goroutine.
+type lockedWriter struct {
+	mu *sync.Mutex
+	w  io.Writer
+}
+
+func (l *lockedWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.w.Write(p)
 }
 
 func (d *Driver) Events() <-chan Event { return d.events }
@@ -164,7 +185,23 @@ func (d *Driver) read(r io.Reader) {
 		d.events <- ParseError{Err: err}
 	}
 	exitErr := d.cmd.Wait()
-	d.events <- DriverExit{Err: exitErr}
+	var stderrTail string
+	if exitErr != nil {
+		stderrTail = d.tailStderr()
+	}
+	d.events <- DriverExit{Err: exitErr, Stderr: stderrTail}
+}
+
+// tailStderr returns up to the last ~1KB of captured stderr, trimmed.
+func (d *Driver) tailStderr() string {
+	d.stderrMu.Lock()
+	defer d.stderrMu.Unlock()
+	b := d.stderrBuf.Bytes()
+	const max = 1024
+	if len(b) > max {
+		b = b[len(b)-max:]
+	}
+	return strings.TrimSpace(string(b))
 }
 
 func parseLine(line []byte) (Event, error) {

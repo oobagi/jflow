@@ -1,18 +1,17 @@
 package ui
 
-// Keybinding strings used in the help footer.
+// Keybinding strings used in the help footer and overlay.
 //
-// Only bindings actually wired in App.Update are listed here. v0 prototype:
-// all other "documented in 04-tui-design" keys (?, n, t, w, s, /, j/k,
-// ^L, ^E) require workspaces/sessions scaffolding that lands in later
-// phases. When you add the binding, add it here.
+// Only bindings actually wired in App.Update are listed here. The MVP TUI
+// is a single-pane chat (Phase 1); workspace/session keys (n, t, w, s, /,
+// j/k, g/G, ^L) land with the three-pane shell in later phases.
 const (
-	KeySend      = "⏎"        // enter — sends the composer
-	KeyNewline   = "⇧⏎"      // shift+enter (or ctrl+j) — soft newline
-	KeyCompact   = "⌃K"       // sends "/compact" as next user message
-	KeyInterrupt = "⌃X"       // SIGINT to current claude subprocess
-	KeyQuit      = "esc"      // (or ⌃C with no driver running)
-	KeyScroll    = "PgUp/PgDn" // viewport scroll (also mouse wheel)
+	KeySend      = "⏎"   // enter — sends the composer
+	KeyNewline   = "⇧⏎" // shift+enter (or ctrl+j) — soft newline
+	KeyCompact   = "⌃K"  // sends "/compact" as next user message
+	KeyInterrupt = "⌃C"  // cancels in-flight turn (or pending spawn); never quits
+	KeyQuit      = "esc" // quit when idle; interrupt when busy
+	KeyHelp      = "?"   // toggles full-screen help overlay
 )
 
 // HelpRow is one entry in the help footer.
@@ -22,9 +21,9 @@ func DefaultHelp() []HelpRow {
 	return []HelpRow{
 		{KeySend, "send"},
 		{KeyNewline, "newline"},
-		{KeyScroll, "scroll"},
 		{KeyInterrupt, "interrupt"},
 		{KeyCompact, "compact"},
+		{KeyHelp, "help"},
 		{KeyQuit, "quit"},
 	}
 }

@@ -16,17 +16,18 @@ const (
 	BlockThinking
 	BlockToolUse
 	BlockSystem // info/banner (init, compaction, errors)
+	BlockTiming // dim "worked for 2.3s" line under the previous block
 )
 
 // Block is one rendered unit in the transcript.
 type Block struct {
-	Kind     BlockKind
-	Text     string // for User/Text/Thinking/System
-	ToolName string // for ToolUse
-	ToolID   string
-	ToolArgs string // streamed partial JSON, prettified at stop
-	Sealed   bool   // false while streaming, true after stop
-	StreamIdx int   // matches stream_event index for content blocks
+	Kind      BlockKind
+	Text      string // for User/Text/Thinking/System/Timing
+	ToolName  string // for ToolUse
+	ToolID    string
+	ToolArgs  string // streamed partial JSON, prettified at stop
+	Sealed    bool   // false while streaming, true after stop
+	StreamIdx int    // matches stream_event index for content blocks
 }
 
 // Transcript holds the ordered list of blocks for the current session.
@@ -42,6 +43,12 @@ func (t *Transcript) AddUserMessage(text string) {
 // AddSystemNote appends a sealed system note (e.g. "session started", error).
 func (t *Transcript) AddSystemNote(text string) {
 	t.Blocks = append(t.Blocks, &Block{Kind: BlockSystem, Text: text, Sealed: true})
+}
+
+// AddTiming appends a "worked for 2.3s" line that renders dimly under the
+// previous block with no blank separator above it.
+func (t *Transcript) AddTiming(text string) {
+	t.Blocks = append(t.Blocks, &Block{Kind: BlockTiming, Text: text, Sealed: true})
 }
 
 // OnContentBlockStart starts a new streaming block keyed by stream index.
@@ -111,7 +118,7 @@ func (t *Transcript) Render(theme Theme, width int) string {
 		width = 20
 	}
 	var lines []string
-	for _, b := range t.Blocks {
+	for i, b := range t.Blocks {
 		switch b.Kind {
 		case BlockUser:
 			rendered := wrapWithPrefix(b.Text, theme.UserPrefix.Render("you ▸ "), "      ", width)
@@ -140,8 +147,17 @@ func (t *Transcript) Render(theme Theme, width int) string {
 			for _, p := range strings.Split(body, "\n") {
 				lines = append(lines, theme.Dim.Render(p))
 			}
+		case BlockTiming:
+			// Indent matches the assistant body indent so it tucks neatly
+			// under "claude ▸ ...".
+			lines = append(lines, theme.Dim.Render("         worked for "+b.Text))
 		}
-		lines = append(lines, "")
+		// Suppress the trailing blank when the next block is a timing line
+		// so the timing sits directly under its response.
+		nextIsTiming := i+1 < len(t.Blocks) && t.Blocks[i+1].Kind == BlockTiming
+		if !nextIsTiming {
+			lines = append(lines, "")
+		}
 	}
 	return strings.Join(lines, "\n")
 }
