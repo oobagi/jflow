@@ -687,8 +687,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.quitting = true
 			return a, tea.Quit
 		case "ctrl+k":
-			// compact: send "/compact" as the next user message
-			return a, a.send("/compact")
+			// compact: route through dispatch so the user sees a "compacting…"
+			// note in the transcript instead of just a bare "/compact" send.
+			return a, a.dispatch("/compact")
 		case "shift+enter", "ctrl+j":
 			// soft newline — forward to the textarea as a synthetic Enter
 			cmd := a.composer.InsertNewline()
@@ -716,7 +717,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.debug {
 				a.writeMeta("key", map[string]any{"key": key, "context": "send"})
 			}
-			return a, a.send(text)
+			return a, a.dispatch(text)
 		case "up":
 			// History recall (#29). Only intercept when the composer is
 			// empty (nothing to lose) or when we're already navigating
@@ -798,6 +799,57 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	a.composer, cmd = a.composer.Update(msg)
 	return a, cmd
+}
+
+// dispatch is the entry point for any composer submission (enter or a wired
+// keybind like ⌃K). It intercepts harness-level slash commands so they don't
+// silently fall through to claude as opaque text — claude doesn't recognise
+// `/new` at all, and `/compact` runs but its result event is easy to miss
+// in the stream — and surfaces visible feedback in the transcript before
+// either resetting the session locally or forwarding to claude.
+//
+// Returns nil for fully-local commands (no claude turn was queued).
+func (a *App) dispatch(text string) tea.Cmd {
+	switch strings.TrimSpace(text) {
+	case "/new", "/clear":
+		// Local reset: spin up a fresh session in the same workspace as the
+		// current one so the user keeps their cwd context. Falls back to a
+		// general session when there's no active workspace.
+		a.startFreshSession()
+		return nil
+	case "/compact":
+		// Claude handles /compact natively, but the only signal the user
+		// gets back is a quiet result event — so prefix a system note so the
+		// chat panel makes it obvious something kicked off.
+		a.transcript.AddSystemNote("compacting context…")
+		return a.send(text)
+	}
+	return a.send(text)
+}
+
+// startFreshSession is the local handler for `/new` and `/clear`. Refuses
+// while a turn is in flight (matches activateSession's policy) and reuses
+// the existing create helpers so naming, expansion, and tree-cursor
+// placement stay consistent with creating a session via the tree pane.
+func (a *App) startFreshSession() {
+	if a.driver != nil || a.spawning {
+		a.transcript.AddSystemNote("can't start a new session while a turn is running — cancel first (⌃C)")
+		return
+	}
+	if a.sessStore == nil {
+		return
+	}
+	var ws string
+	if a.sessionUUID != "" {
+		if s, err := a.sessStore.Get(a.sessionUUID); err == nil {
+			ws = s.WorkspaceID
+		}
+	}
+	if ws == "" {
+		a.createGeneralSession()
+	} else {
+		a.createSessionIn(ws)
+	}
 }
 
 // send queues a new claude turn for the given user message. The actual
@@ -1167,6 +1219,10 @@ func (a *App) openWorkspacePrompt() {
 	ti.SetValue(cwd)
 	ti.CharLimit = 0
 	ti.SetWidth(40)
+	// Drop the default "> " prompt — the framed title + box already cue the
+	// user that this is an input, so the prompt would just look like noise
+	// inside the rounded box.
+	ti.Prompt = ""
 	ti.Focus()
 	a.wsPromptInput = ti
 	a.wsPromptOpen = true
@@ -1279,15 +1335,32 @@ func (a *App) deactivateSession() {
 
 // renderWsPrompt builds the bottom-sheet overlay shown while the workspace
 // path prompt is open. Width is the inner-chat-column width (caller indents
-// for the column padding).
+// for the column padding). Renders as:
+//
+//	+ new workspace
+//	╭───────────────────────────╮
+//	│ /path/to/folder           │
+//	╰───────────────────────────╯
+//	⏎ create  ·  esc cancel
+//
+// The rounded box (ComposerBg style) frames the input so it reads as an
+// editable field rather than naked indented text. ComposerBg adds 4 cells of
+// chrome (border + horizontal padding) — the textinput is sized to the
+// remaining inner space.
 func (a *App) renderWsPrompt(width int) string {
-	if width < 8 {
-		width = 8
+	if width < 12 {
+		width = 12
 	}
-	a.wsPromptInput.SetWidth(width - 6)
-	title := a.theme.Accent.Render("new workspace")
+	const boxChrome = 4
+	inputW := width - boxChrome - 1
+	if inputW < 8 {
+		inputW = 8
+	}
+	a.wsPromptInput.SetWidth(inputW)
+	title := a.theme.Accent.Render("+ new workspace")
+	box := a.theme.ComposerBg.Render(a.wsPromptInput.View())
 	hint := a.theme.Dim.Render("⏎ create  ·  esc cancel")
-	return title + "\n  " + a.wsPromptInput.View() + "\n" + hint
+	return title + "\n" + box + "\n" + hint
 }
 
 // expandHome expands a leading ~ in the given path against $HOME.
@@ -1514,9 +1587,13 @@ func (a *App) View() tea.View {
 		bottomBody += "\n" + indentLines(sheet, chatPadH)
 		bottomH += sheetH
 	}
+	// Mirror the top rule with a plain `─` rule below the composer so the
+	// hint bar doesn't sit flush against the input. Keeps the composer feeling
+	// like a contained block instead of running straight into the cheatsheet.
+	bottomRule := a.theme.Dim.Render(strings.Repeat("─", centerW))
 	hintBar := renderHintBar(a, centerW)
-	bottom := rule + "\n" + bottomBody + "\n" + hintBar
-	bottomH += 1
+	bottom := rule + "\n" + bottomBody + "\n" + bottomRule + "\n" + hintBar
+	bottomH += 2
 
 	// Center column: transcript + bottom (composer/sheet). No header, no
 	// background fill — the chat column is just terminal default. Reserve
