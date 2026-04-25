@@ -23,14 +23,14 @@ type HelpRow struct{ Key, Desc string }
 // keys that actually do something when the user types in the chat. Tree-only
 // keys (n/a/x/⏎-on-row) are excluded; pressing them in chat just types the
 // letter, so showing them here is misleading.
+//
+// Pared back to just `?` and `esc` so the hint bar stays a thin reminder of
+// how to discover everything else (via the help sheet) and how to quit. Send,
+// newline, recall, interrupt, and tab are all reachable through `?` once the
+// user goes looking — keeping them inline made the strip cramped without
+// teaching anything.
 func ChatHelp() []HelpRow {
 	return []HelpRow{
-		{KeySend, "send"},
-		{KeyNewline, "newline"},
-		{KeyHistory, "recall"},
-		{KeyInterrupt, "interrupt"},
-		{KeyCompact, "compact"},
-		{KeyTab, "focus tree"},
 		{KeyHelp, "help"},
 		{KeyQuit, "quit"},
 	}
