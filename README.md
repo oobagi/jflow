@@ -1,7 +1,7 @@
 <p align="center">
   <img src="assets/logo.png" alt="jflow" width="420">
   <br><br>
-  Skills and agents for <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> that automate the full dev loop (planning, implementation, code review, security hardening, and shipping) so you can go from a rough idea to a merged PR in one command.
+  A CLI/TUI harness that drives <a href="https://docs.anthropic.com/en/docs/claude-code">Claude Code</a> through real dev loops — workspaces, sessions, controlled context, and a todo pane the agent shares with you.
   <br><br>
   <a href="https://github.com/oobagi/jflow/releases"><img src="https://img.shields.io/github/v/release/oobagi/jflow?label=version" alt="Version" /></a>
   <a href="https://github.com/oobagi/jflow/blob/main/LICENSE"><img src="https://img.shields.io/github/license/oobagi/jflow" alt="License" /></a>
@@ -10,119 +10,128 @@
 </p>
 
 <p align="center">
+  <a href="#what-this-is"><strong>What this is</strong></a>
+  ·
   <a href="#install"><strong>Install</strong></a>
   ·
-  <a href="#skills"><strong>Skills</strong></a>
-  ·
-  <a href="#flows"><strong>Flows</strong></a>
+  <a href="#skills-v1-still-shipped"><strong>Skills</strong></a>
   ·
   <a href="#agents"><strong>Agents</strong></a>
+  ·
+  <a href="ROADMAP.md"><strong>Roadmap</strong></a>
 </p>
 
 ---
 
-## How it works
+## What this is
 
-[gstack](https://github.com/garrytan/gstack) proved that Claude Code gets dramatically better with structured roles and sequential workflows. But gstack is massively over-engineered — 20 roles simulating an entire company (CEO reviews, office hours, design consultations, retros, standups). It models how an *org* makes decisions. jflow models *the code*. No meetings, no management layer, no org chart. Just the loop every developer actually runs: plan it, build it in a worktree, review it, harden it, ship it, move on. Same results, fraction of the complexity, way faster.
+**jflow is becoming a Go CLI + Bubble Tea TUI** — a three-pane harness that drives `claude -p` as a subprocess. The mental model: **`claude` is the worker, `jflow` is the foreman.**
 
-The power is in the flows. `/jflow "your app idea"` runs an upfront interview that catches every blocker (API keys, secrets, services, design preferences) then chains `/setup` → `/autopilot` to scaffold, implement, review, and ship the entire app without stopping. `/autopilot` works through your roadmap: picks up the next item, implements it, dispatches parallel review agents, opens a PR, waits for CI, merges, and loops, running `/docs`, `/simplify`, and `/checkup` at phase boundaries. `/polish` does the same for ad-hoc work you've already built. One command in, merged PRs out.
+```
+┌──────────────┬───────────────────────────────────┬────────────────────┐
+│ workspaces   │ chat                              │ todo               │
+│              │                                   │                    │
+│ ▸ ~/code/app │  you ▸ work through next 3 issues │ [x]  Read tests    │
+│   ~/.jflow   │                                   │ ▸    Patch regex   │
+│   /tmp/scrtch│  claude ▸ Starting on issue #41…  │ [ ]  Run npm test  │
+│              │  ⚙ Read("validate.test.ts")       │ [ ]  Open PR       │
+│ + new        │  ⚙ Edit("validate.ts")            │                    │
+│              │  > _                              │ a add · ⏎ activate │
+└──────────────┴───────────────────────────────────┴────────────────────┘
+```
 
-The individual skills are useful on their own too. `/issue` turns a rough complaint into a well-scoped ticket, and auto-scales to a multi-issue breakdown with a roadmap when the idea is bigger. `/qa auto` opens the app in a real browser, clicks through every feature, takes screenshots, and reports what's broken. `/test` dispatches up to 6 review agents in parallel against your uncommitted changes and spawns fixers for anything they flag.
+**Why a harness?** The old `/jflow` and `/autopilot` skills degraded fast inside one Claude session because the same context window had to hold the orchestration playbook, plan the work, execute every step, and carry results between steps. By the third issue, context was bloated and the model started cutting corners.
+
+Putting orchestration in code means jflow can:
+
+- decide *when* to compact and *what* to carry forward (configurable per tool, e.g. `compact_at = 0.15`)
+- run each phase in its own `claude -p` subprocess with a focused prompt
+- share a **flat todo list** between the worker (via a bundled MCP server) and the user (via a focusable right pane) — no more guessing what the agent thinks it's doing
+- spawn cheap Sonnet meta-calls for orchestration decisions ("is the worker stuck?", "grade this output") without polluting the worker's context
+
+Status: Phase 1 prototype is working end-to-end (single-pane chat with streaming, status bar, per-turn driver lifecycle). Phase 2 (workspaces / sessions / todo pane) is next. Track progress in [`ROADMAP.md`](ROADMAP.md).
 
 ## Install
 
 ```bash
-git clone https://github.com/oobagi/jflow.git && cd jflow && ./install.sh
+git clone https://github.com/oobagi/agency-skills.git ~/.jflow && cd ~/.jflow && ./install.sh
 ```
 
 Symlinks skills/agents into `~/.claude/`, copies hooks, merges settings (preserves your config). Requires `git` and `jq`.
 
 Flags: `--dry-run` (preview) | `--no-settings` (skip settings merge) | `--no-rtk` (skip token proxy) | `--uninstall`
 
-Settings merge is additive — your existing values are preserved. Backup saved to `settings.json.pre-jflow`.
+> The Go binary install (`go install ./cmd/jflow/`) is wired into Phase 5 of the roadmap. Until then, run the prototype directly: `cd ~/.jflow && go run ./cmd/jflow/`.
 
-## Skills
+## Skills (v1, still shipped)
+
+The skill bundle is the current way to use jflow inside Claude Code. The CLI rewrite ports the **`jflow` suite** (`autopilot`, `next`, `ship`, `polish`, `qa`, `release`, `jflow`, `setup`, `issue`) into deterministic Go tool programs. The standalone skills below stay as Claude Code skills — they don't need a harness.
 
 Invoked via `/skill-name`. Orchestrate agents, manage branches, ship code.
 
-| Skill | What it does | Flags |
+| Skill | What it does | Status |
 |-------|-------------|-------|
-| `/jflow` | End-to-end app builder. Interview, scaffold, implement, review, ship | `skip-setup` `dry-run` `interactive` |
-| `/autopilot` | Full dev loop, iterates ROADMAP items via `/next` → `/test` → `/ship` | `roadmap` `issues` `interactive` `phase-N` `dry-run` `compact-N%` |
-| `/polish` | Quality pipeline: `/simplify` → `/harden` → `/test` → `/ship` | `dry-run` `no-ship` `skip-simplify` `skip-harden` |
-| `/next` | Pick up next ROADMAP item, work in a worktree | `parallel` `<issue number>` |
-| `/test` | Dispatch review agents against uncommitted changes | `security` `performance` `accessibility` `api` |
-| `/ship` | Branch, commit, PR, CI, merge, cleanup | — |
-| `/harden` | Security audit + input validation + error boundaries | `audit` `fix` `logging` `validation` `errors` `boundaries` |
-| `/simplify` | Parallel agents fix DRY violations, dead code, complexity | `full` `scope:PATH` `dry-only` `dead-only` `logic-only` |
-| `/issue` | Turn a rough idea into GitHub issues, auto-scaling to a multi-issue breakdown for bigger work | *problem description* |
-| `/setup` | Scaffold new project: repo, CI/CD, docs, roadmap, issues | *project description* |
-| `/docs` | Sync README, ROADMAP, CHANGELOG, docs/ with codebase state | `changelog` `full` |
-| `/design` | Design system creation or audit (colors, typography, components) | `create` `audit` |
-| `/scrape-design` | Playwright-based website design extraction | *url* |
-| `/sitrep` | Branch health, stale worktrees, uncommitted work, recent activity | — |
-| `/qa` | Walk through testing every feature, or `auto` for Playwright-driven testing | `auto` `latest` |
-| `/release` | Cut a release — triggers the project's release mechanism and monitors to completion | `preview` `production` `--screenshots` |
-| `/checkup` | Git hygiene: prune remotes, remove stale branches/worktrees, gc | `now` |
-| `/upgrade-jflow` | Pull latest jflow, re-run installer | `check` `force` |
+| `/jflow` | End-to-end app builder. Interview, scaffold, implement, review, ship | porting → CLI |
+| `/autopilot` | Full dev loop, iterates ROADMAP items via `/next` → `/ship` | porting → CLI |
+| `/next` | Pick up next ROADMAP item, work in a worktree | porting → CLI |
+| `/ship` | Branch, commit, PR, CI, merge, cleanup | porting → CLI |
+| `/polish` | Quality pipeline: simplify → harden → test → ship | porting → CLI |
+| `/qa` | Walk through testing every feature, or `auto` for Playwright-driven testing | porting → CLI |
+| `/release` | Cut a release — triggers the project's release mechanism and monitors to completion | porting → CLI |
+| `/setup` | Scaffold new project: repo, CI/CD, docs, roadmap, issues | porting → CLI |
+| `/issue` | Turn a rough idea into GitHub issues, auto-scaling to multi-issue breakdown | porting → CLI |
+| `/test` | Dispatch review agents against uncommitted changes | stays as skill |
+| `/simplify` | Parallel agents fix DRY violations, dead code, complexity | stays as skill |
+| `/harden` | Security audit + input validation + error boundaries | stays as skill |
+| `/docs` | Sync README, ROADMAP, CHANGELOG, docs/ with codebase state | stays as skill |
+| `/sitrep` | Branch health, stale worktrees, uncommitted work, recent activity | stays as skill |
+| `/checkup` | Git hygiene: prune remotes, remove stale branches/worktrees, gc | stays as skill |
+| `/design` | Design system creation or audit | stays as skill |
+| `/scrape-design` | Playwright-based website design extraction | stays as skill |
+| `/upgrade-jflow` | Pull latest jflow, re-run installer | stays as skill |
 
 Flags are passed as arguments: `/autopilot issues interactive`, `/polish no-ship skip-harden`, `/harden audit logging`.
 
-## Flows
+### Flows
 
 Three skills orchestrate nested skill chains:
 
-### `/jflow` — idea to finished app
+#### `/jflow` — idea to finished app
 
-> **When to use:** You have an app idea and nothing else. No repo, no scaffold, no roadmap. You want to go from zero to merged PRs in one session.
-
-Flags: `skip-setup` (resume on existing project) | `dry-run` (preview plan) | `interactive` (confirm before each autopilot item)
+> **When to use:** App idea, no repo. Go from zero to merged PRs in one session.
 
 ```
 "daily briefing app with Stripe billing"
-  │
   ├─> interview      Catch all blockers upfront (keys, services, design)
-  ├─> resolve        Install tools, collect credentials, validate env
   ├─> /setup         Scaffold repo, CI/CD, roadmap, issues
-  ├─> bridge         Install deps, write .env, verify build, /design
-  ├─> /autopilot     Build every roadmap item (loop below)
+  ├─> /autopilot     Build every roadmap item
   └─> summary        What shipped, what's deferred, what to deploy
 ```
 
-### `/autopilot` — ROADMAP to shipped PRs
+#### `/autopilot` — ROADMAP to shipped PRs
 
-> **When to use:** You already have a repo with a ROADMAP or open GitHub issues. You want Claude to work through them one by one — implement, review, ship, repeat — without babysitting.
-
-Flags: `roadmap` | `issues` (source filter) | `interactive` (confirm each item) | `phase-N` (start at phase) | `dry-run` | `compact-N%` (context threshold)
+> **When to use:** Repo with a ROADMAP or open issues. Work through them one by one without babysitting.
 
 ```
 ROADMAP.md item
-  │
   ├─> /next       Create worktree, plan implementation
   ├─> implement   Dispatch architects + developers
-  ├─> /test       Review agents validate
+  ├─> /test       Review agents validate (when warranted)
   ├─> /ship       Branch, PR, CI, merge
-  │
-  ├─> (repeat for next item)
-  │
-  └─> /harden + /docs + /simplify + /checkup  (at phase boundaries)
+  └─> (loop)
 ```
 
-### `/polish` — cleanup to ship
+#### `/polish` — cleanup to ship
 
-> **When to use:** You've been hacking on something ad-hoc — it works but it's messy. You want it cleaned up, hardened, reviewed, and shipped without thinking about the steps.
-
-Flags: `dry-run` | `no-ship` (stop before PR) | `skip-simplify` | `skip-harden`
+> **When to use:** You've been hacking ad-hoc and want it cleaned up, hardened, reviewed, shipped.
 
 ```
 uncommitted changes
-  │
   ├─> /simplify   DRY, dead code, complexity
   ├─> /harden     Security + validation
   ├─> /test       Review agents validate
   └─> /ship       Branch, PR, CI, merge
 ```
-
 
 ## Agents
 
@@ -190,6 +199,8 @@ Used across skills whenever framework-specific guidance is needed — `/setup` f
 
 ## Architecture
 
+Today (skill bundle):
+
 ```
 ~/.jflow/                                ~/.claude/
 ├── skills/ ─────────── symlink ──────> ├── skills/
@@ -198,3 +209,22 @@ Used across skills whenever framework-specific guidance is needed — `/setup` f
 └── settings/base.json ──── merge ────> └── settings.json
 ```
 
+Coming (CLI harness):
+
+```
+~/.jflow/
+├── cmd/jflow/                  cobra root, subcommands
+├── internal/
+│   ├── claude/                 driver — spawns claude -p, decodes JSONL
+│   ├── ui/                     bubbletea v2 three-pane TUI
+│   │   ├── todopane/           flat todo list, active indicator
+│   │   └── ...
+│   ├── workspace/              cwd-keyed registry
+│   ├── session/                per-session state (transcript, todos, usage)
+│   ├── tool/                   Tool interface + autopilot/next/ship/...
+│   ├── mcp/todo/               bundled MCP server: todo_* tools
+│   └── meta/                   cheap-Sonnet meta-loop for orchestration decisions
+└── ~/.jflow/state/             workspaces.json + sessions/<uuid>.json + logs/
+```
+
+See [`docs/`](docs/) for the full design — overview, architecture, TUI, context management, build order, meta-model loop.

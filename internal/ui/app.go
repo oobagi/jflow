@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/viewport"
 	"github.com/google/uuid"
 
 	"github.com/oobagi/jflow/internal/claude"
@@ -25,6 +26,7 @@ type App struct {
 	width       int
 	height      int
 	transcript  Transcript
+	viewport    viewport.Model
 	composer    Composer
 	status      StatusBar
 	help        []HelpRow
@@ -67,6 +69,7 @@ type App struct {
 func NewApp(debug bool, version string) *App {
 	a := &App{
 		theme:       DefaultTheme(),
+		viewport:    viewport.New(),
 		composer:    NewComposer(),
 		help:        DefaultHelp(),
 		sessionUUID: uuid.NewString(),
@@ -75,6 +78,7 @@ func NewApp(debug bool, version string) *App {
 		debug:       debug,
 		jflowVer:    version,
 	}
+	a.viewport.SoftWrap = true
 	a.openLog()
 	return a
 }
@@ -167,10 +171,35 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = m.Width
 		a.height = m.Height
 		a.composer.SetWidth(m.Width - 2)
+		a.viewport.SetWidth(m.Width - 2)
+		a.viewport.SetHeight(a.transcriptHeight())
+		return a, nil
+
+	case tea.MouseWheelMsg:
+		switch m.Button {
+		case tea.MouseWheelUp:
+			a.viewport.ScrollUp(3)
+		case tea.MouseWheelDown:
+			a.viewport.ScrollDown(3)
+		}
 		return a, nil
 
 	case tea.KeyPressMsg:
 		key := m.String()
+		switch key {
+		case "pgup":
+			a.viewport.PageUp()
+			return a, nil
+		case "pgdown":
+			a.viewport.PageDown()
+			return a, nil
+		case "ctrl+u":
+			a.viewport.HalfPageUp()
+			return a, nil
+		case "ctrl+d":
+			a.viewport.HalfPageDown()
+			return a, nil
+		}
 		switch key {
 		case "ctrl+c", "esc":
 			if a.driver != nil {
@@ -371,15 +400,28 @@ func (a *App) View() tea.View {
 		return v
 	}
 
-	statusH := 1
-	composerH := 5 // textarea height + borders
-	transcriptH := a.height - statusH - composerH
-	if transcriptH < 5 {
-		transcriptH = 5
+	transcriptH := a.transcriptHeight()
+	if a.viewport.Height() != transcriptH || a.viewport.Width() != a.width-2 {
+		a.viewport.SetWidth(a.width - 2)
+		a.viewport.SetHeight(transcriptH)
 	}
 
-	tx := a.transcript.Render(a.theme, a.width-2)
-	tx = clipToHeight(tx, transcriptH)
+	wasAtBottom := a.viewport.AtBottom()
+	a.viewport.SetContent(a.transcript.Render(a.theme, a.width-2))
+	if wasAtBottom {
+		a.viewport.GotoBottom()
+	}
+
+	tx := a.viewport.View()
+	if !a.viewport.AtBottom() {
+		// Replace the last visible line with a "jump to bottom" chip so total
+		// height stays constant.
+		lines := strings.Split(tx, "\n")
+		if len(lines) > 0 {
+			lines[len(lines)-1] = a.theme.Accent.Render("↓ jump to bottom")
+		}
+		tx = strings.Join(lines, "\n")
+	}
 
 	help := a.renderHelp()
 	statusLine := a.status.View(a.theme, a.width)
@@ -404,6 +446,7 @@ func (a *App) View() tea.View {
 	}, "\n")
 	v := tea.NewView(content)
 	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 
@@ -415,14 +458,13 @@ func (a *App) renderHelp() string {
 	return strings.Join(parts, "  ")
 }
 
-// clipToHeight returns the last n lines of s, padding with blanks if shorter.
-func clipToHeight(s string, n int) string {
-	lines := strings.Split(s, "\n")
-	if len(lines) > n {
-		lines = lines[len(lines)-n:]
+// transcriptHeight returns the number of rows reserved for the transcript
+// viewport: total height minus status (1) and composer (5).
+func (a *App) transcriptHeight() int {
+	const statusH, composerH = 1, 5
+	h := a.height - statusH - composerH
+	if h < 5 {
+		h = 5
 	}
-	for len(lines) < n {
-		lines = append([]string{""}, lines...)
-	}
-	return strings.Join(lines, "\n")
+	return h
 }

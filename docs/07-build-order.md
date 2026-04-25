@@ -33,16 +33,18 @@ Not yet:
 
 Acceptance: launch `jflow`, have a real conversation, ask claude to read a file, watch the tool call render, send `/compact`, see usage drop, exit cleanly.
 
-## Phase 2 — workspaces + sessions persistence
+## Phase 2 — workspaces + sessions + three-pane shell + todo pane
 
 - `internal/workspace/{workspace.go,store.go}` and `internal/session/{session.go,store.go,transcript.go}`
-- `~/.jflow/state/` directory layout
-- bubbletea root model with three panes (workspaces / sessions / focus)
-- `cmd/workspace.go` and `cmd/session.go` for ls/rm/export
+- `~/.jflow/state/` directory layout (workspaces.json + sessions/<uuid>.json with `todos[]`)
+- bubbletea root model with three panes: **workspaces · chat · todo**
+- `cmd/workspace.go` (ls/add/rm) and `cmd/session.go` (ls/archive/rm)
 - new session = new claude `--session-id <uuid>`; existing session = `--resume <uuid>`
-- `Ctrl+E` exports current session to markdown
+- `internal/ui/todopane/` — flat todo list, active indicator, user keybinds (a add, e edit, ⏎ activate, space done, s send-to-chat)
+- `internal/mcp/todo/` — bundled MCP server exposing `todo_list/add/set_active/complete/delete/update`; auto-registered when spawning `claude -p`
+- One-line system-prompt addendum tells the worker the `todo_*` tools exist and the user can see/edit the list
 
-Acceptance: open `jflow`, see workspaces, pick one, see prior sessions with cost/ctx/timestamps, resume one, see the full prior transcript, send a new message.
+Acceptance: open `jflow`, see workspaces, pick one, see prior sessions with cost/ctx/timestamps, resume one, see the full prior transcript, send a new message. Worker creates a todo via `todo_add` → it appears in the right pane within the same turn. User adds a todo via `a` → next worker turn sees it via `todo_list`.
 
 ## Phase 3 — first tool program: `autopilot`
 
@@ -59,57 +61,35 @@ Acceptance: open `jflow`, see workspaces, pick one, see prior sessions with cost
 
 Acceptance: `jflow run autopilot` works through 3 issues without context bloat; comparable session in old `/autopilot` skill bloats by issue 2. Token totals captured for the comparison in `06-cost-and-bare-mode.md`.
 
-## Phase 4 — port the rest
+## Phase 4 — port the rest of the jflow suite
 
 In rough order of value:
 1. `next` — pick + work one item
 2. `ship` — branch, commit, PR, merge, cleanup
-3. `polish` — simplify → harden → test → ship pipeline
+3. `polish` — pipeline (composes simplify/harden/test as Claude Code skills)
 4. `qa` — feature testing
 5. `release` — preview/production releases
 6. `jflow` — onboarding interview
 7. `setup` — project scaffolding
 8. `issue` — github issue authoring
 
-Each is a `<200 line tool program. Most of the value is in the harness; the tools are just playbooks.
+Each is a <200 line tool program. Most of the value is in the harness; the tools are just playbooks.
 
-## Phase 5 — skill shims
+The standalone Claude Code skills (`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`) are **not ported** — they don't need a harness around them and stay invokable as `/skill-name` inside Claude Code.
 
-Each existing `skills/<name>/SKILL.md` becomes:
-
-```markdown
----
-name: <name>
-description: ...
----
-
-This skill now lives in the jflow CLI. Run from your terminal:
-
-    jflow run <name>
-
-Or open the TUI and start a `<name>` session:
-
-    jflow
-
-For backwards compat, this skill will shell out:
-    !jflow run <name> "$ARGUMENTS"
-```
-
-The shell-out keeps `/jflow` inside Claude Code working without ceremony.
-
-## Phase 6 — install / release
+## Phase 5 — install / release
 
 - `install.sh` updates: `go install ./cmd/jflow/` alongside existing symlink dance
 - `goreleaser` (mirroring notebook) for binary releases
 - `upgrade-jflow` skill becomes `jflow upgrade` (keeps the same UX)
 - `VERSION` file kept; binary embeds it via `-ldflags`
 
-## Phase 7 — agents
+---
 
-Long-tail features that aren't blocking:
-- `--include-hook-events` rendering for non-bare sessions
-- session export/import as `.jflow` packages (zip with transcript + metadata)
-- workspace search across sessions (grep-on-transcripts)
-- "duplicate session" / "branch from message N" using `--fork-session`
-- agent-team integration (`--teammate-mode`, `--agents`)
-- web companion (claude.ai-on-the-web link via `--remote` / `--teleport`)
+## Out of scope (closed during spring-2026 cleanup)
+
+- Markdown export of sessions
+- `/commands` palette overlay (claude slash-command pass-through)
+- Skill shims (the standalone skills stay as primary entry points; no shell-out wrapper)
+- Phase 4 ports of skills outside the jflow suite (simplify, harden, test, docs, sitrep, checkup, design, scrape-design)
+- Former Phase 7 items: stream-json mid-flight injection, hook-events rendering, transcript search, fork-session, agent-team integration, web companion

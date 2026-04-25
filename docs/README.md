@@ -13,6 +13,7 @@ Read in this order:
 7. [`06-cost-and-bare-mode.md`](06-cost-and-bare-mode.md) — the `$0.20/turn` finding and `--bare` rationale
 8. [`07-build-order.md`](07-build-order.md) — phased plan v0 → v6
 9. [`08-open-questions.md`](08-open-questions.md) — verifications still owed
+10. [`09-meta-model.md`](09-meta-model.md) — cheap-Sonnet meta-loop for harness orchestration decisions
 
 ## Provenance
 
