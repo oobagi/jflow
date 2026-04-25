@@ -7,3 +7,13 @@
 *.p12
 credentials.json
 .playwright-mcp/
+
+# Go
+/jflow
+/cmd/jflow/jflow
+*.test
+*.out
+
+# Runtime jflow state at the repo root only (session logs, future workspace
+# registries). Anchored to `/` so it doesn't shadow `internal/state/`.
+/state/
