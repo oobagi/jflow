@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,26 +12,43 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/google/uuid"
 
 	"github.com/oobagi/jflow/internal/claude"
+	"github.com/oobagi/jflow/internal/config"
+	"github.com/oobagi/jflow/internal/session"
 	"github.com/oobagi/jflow/internal/state"
+	"github.com/oobagi/jflow/internal/workspace"
 )
 
-// App is the root Bubble Tea model for the v0 single-pane chat prototype.
-// It owns one ephemeral session, spawning a fresh `claude -p --resume <uuid>`
-// subprocess per user turn. Streaming events update the transcript live.
+// focusKind identifies which pane currently has keyboard focus. Tab cycles
+// the focus left → composer → right → left, mirroring how the three columns
+// sit visually on screen.
+type focusKind int
+
+const (
+	focusComposer focusKind = iota
+	focusLeft
+	focusRight
+)
+
+// App is the root Bubble Tea model. It manages a list of workspaces (folders)
+// each containing zero or more sessions (independent claude conversations).
+// Only one session is "active" at a time — its transcript fills the chat
+// column. Without an active session the chat area shows a placeholder.
 type App struct {
-	theme       Theme
-	width       int
-	height      int
-	transcript  Transcript
-	viewport    viewport.Model
-	composer    Composer
-	status      StatusBar
+	theme      Theme
+	width      int
+	height     int
+	transcript Transcript
+	viewport   viewport.Model
+	composer   Composer
+	status     StatusBar
+
+	// Active session — drives chat. Empty = empty state, no chat.
 	sessionUUID string
 	firstTurn   bool
 
@@ -55,10 +73,15 @@ type App struct {
 	// Banner text for the session (after first system/init).
 	banner string
 
-	// Worktree info shown inline with the composer rule. Detected once on
-	// startup; phase 2 will refresh per-workspace.
+	// Worktree label shown inline with the composer rule. Refreshed per
+	// session activation: general sessions show prefs.DefaultDir, workspace
+	// sessions show their workspace's cwd. branch is recomputed by running
+	// `git rev-parse --abbrev-ref HEAD` inside that cwd.
 	worktree string
 	branch   string
+	// activeCWD is the absolute path the active session's claude subprocess
+	// runs in. Empty until a session is activated.
+	activeCWD string
 
 	// showHelp toggles the full-screen help overlay (#26).
 	showHelp bool
@@ -67,10 +90,31 @@ type App struct {
 
 	// Debug logging: always-on raw JSONL log + jflow meta entries.
 	// `--debug` adds extra meta entries (key presses, etc.).
-	debug    bool
-	logFile  *os.File
-	logPath  string
-	jflowVer string
+	debug       bool
+	logFile     *os.File
+	logPath     string
+	jflowVer    string
+	workspaceID string
+
+	// Left pane state — a file-browser-style tree where workspaces are folders
+	// (collapsible) and sessions are leaves. focusLeft swaps focus between the
+	// composer and the tree (Tab toggles). expanded tracks which workspaces
+	// are open; treeCursor is the index into the flattened render rows.
+	wsStore        *workspace.Store
+	sessStore      *session.Store
+	prefs          config.Preferences
+	wsList         []workspace.Workspace
+	expanded       map[string]bool
+	focus          focusKind
+	treeCursor     int
+	treeConfirmDel bool
+	treePendingID  string
+	treePendingKnd string // "ws" | "sess"
+
+	// Workspace add prompt overlay. Open when user presses `a` while the tree
+	// has focus. Single-line textinput pre-filled with the launch cwd.
+	wsPromptOpen  bool
+	wsPromptInput textinput.Model
 
 	// In-memory history of user sends for ↑/↓ recall (#29). Current-session
 	// only — cross-session recall is out of scope for v0. Pointer semantics:
@@ -82,67 +126,314 @@ type App struct {
 	histIdx int
 }
 
-// NewApp constructs the App with a fresh session uuid.
+// NewApp constructs the App with no active session — the user picks or
+// creates one via the left pane (⌃W workspaces, ⌃S sessions).
 //
 // `debug` enables verbose meta entries in the session log (key events, etc.).
-// `version` is recorded in the session-start meta entry.
+// `version` is recorded in each session-start meta entry.
+// `wsStore`/`sessStore` are the persistent stores (may be nil on bootstrap
+// failure — the UI degrades to a read-only/empty pane).
+// `workspaceID` is the workspace bootstrapped for the launch cwd (#32).
 //
-// Session logs are always written to ~/.jflow/state/logs/<ts>-<sid8>.jsonl
-// regardless of debug mode, and a `last.jsonl` symlink is updated on session
-// start so future runs (or claude itself) can find the most recent session.
-func NewApp(debug bool, version string) *App {
+// Session logs are written to ~/.jflow/state/logs/<ts>-<sid8>.jsonl on
+// session activation; `last.jsonl` is updated on every activation so the
+// most recent session is always reachable.
+func NewApp(debug bool, version string, wsStore *workspace.Store, sessStore *session.Store, prefs config.Preferences, workspaceID string) *App {
 	a := &App{
 		theme:       DefaultTheme(),
 		viewport:    viewport.New(),
 		composer:    NewComposer(),
-		sessionUUID: uuid.NewString(),
 		firstTurn:   true,
-		ctxWindow:   200000, // sane default until the first `result` updates it
+		ctxWindow:   200000,
 		debug:       debug,
 		jflowVer:    version,
+		workspaceID: workspaceID,
+		wsStore:     wsStore,
+		sessStore:   sessStore,
+		prefs:       prefs,
+		expanded:    map[string]bool{},
 	}
 	a.viewport.SoftWrap = true
-	a.worktree, a.branch = detectWorktreeBranch()
-	a.openLog()
+	a.worktree, a.branch = detectWorktreeBranch("")
+	a.wsRefresh()
+	// Auto-expand the launch-cwd workspace so the user sees its sessions
+	// (or "(none)") immediately on startup without an extra keypress.
+	if workspaceID != "" {
+		a.expanded[workspaceID] = true
+	}
+	// Always have an active session: resume the most recent one in the
+	// launch workspace, or create a fresh "default" session if none exist.
+	// This way the center pane is always a usable chat without forcing the
+	// user through workspace/session bookkeeping first.
+	a.ensureActiveSession()
 	return a
 }
 
-// detectWorktreeBranch returns the home-shortened cwd and the current git
-// branch (or empty if not a git repo / detached HEAD that returns "HEAD").
-func detectWorktreeBranch() (string, string) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return "", ""
+// helpForFocus returns the keybind set relevant to the currently-focused
+// pane. The right pane has no actions wired so we show its placeholder list.
+func (a *App) helpForFocus() []HelpRow {
+	switch a.focus {
+	case focusLeft:
+		return TreeHelp()
+	case focusRight:
+		return RightHelp()
+	default:
+		return ChatHelp()
 	}
+}
+
+// cycleFocus returns the next focus state in the composer → left → right
+// ring (Tab forward) or its reverse (Shift+Tab). Tabbing out of the composer
+// lands on the tree first because that's the most common next action; the
+// right pane is informational and comes second.
+func (a *App) cycleFocus(dir int) focusKind {
+	switch a.focus {
+	case focusComposer:
+		if dir > 0 {
+			return focusLeft
+		}
+		return focusRight
+	case focusLeft:
+		if dir > 0 {
+			return focusRight
+		}
+		return focusComposer
+	case focusRight:
+		if dir > 0 {
+			return focusComposer
+		}
+		return focusLeft
+	}
+	return focusComposer
+}
+
+// ensureActiveSession guarantees the chat has something to show. Preference
+// order: most-recent general session → most-recent session in the active
+// workspace → newly-created general session. The launch workspace is always
+// kept alive (recreated for cwd if it was deleted) so the tree still shows
+// it, but the chat default lives outside any workspace.
+func (a *App) ensureActiveSession() {
+	if a.sessionUUID != "" {
+		return
+	}
+	if a.sessStore == nil || a.wsStore == nil {
+		return
+	}
+	if a.workspaceID != "" {
+		if _, err := a.wsStore.Get(a.workspaceID); err != nil {
+			a.workspaceID = ""
+		}
+	}
+	if a.workspaceID == "" {
+		dir := a.prefs.ResolveDefaultDir()
+		if dir == "" {
+			if cwd, err := os.Getwd(); err == nil {
+				dir = cwd
+			}
+		}
+		if dir != "" {
+			if w, _, err := a.wsStore.EnsureForCWD(dir); err == nil {
+				a.workspaceID = w.ID
+				a.expanded[w.ID] = true
+				a.wsRefresh()
+			}
+		}
+	}
+	var pick *session.Session
+	for _, s := range a.sessStore.List() {
+		if s.WorkspaceID != "" {
+			continue
+		}
+		if pick == nil || s.LastUsedAt.After(pick.LastUsedAt) {
+			cp := s
+			pick = &cp
+		}
+	}
+	if pick == nil && a.workspaceID != "" {
+		for _, s := range a.sessStore.ListByWorkspace(a.workspaceID) {
+			if pick == nil || s.LastUsedAt.After(pick.LastUsedAt) {
+				cp := s
+				pick = &cp
+			}
+		}
+	}
+	if pick != nil {
+		a.activateSession(pick.ID)
+		return
+	}
+	s := session.New("", "session 1")
+	if err := a.sessStore.Add(s); err != nil {
+		return
+	}
+	a.activateSession(s.ID)
+}
+
+// wsRefresh reloads the workspace list (LastUsedAt desc, launch-cwd pinned
+// on top) and clamps treeCursor.
+func (a *App) wsRefresh() {
+	if a.wsStore == nil {
+		a.wsList = nil
+		a.treeCursor = 0
+		return
+	}
+	list := a.wsStore.List()
+	for i := 0; i < len(list); i++ {
+		for j := i + 1; j < len(list); j++ {
+			if list[j].LastUsedAt.After(list[i].LastUsedAt) {
+				list[i], list[j] = list[j], list[i]
+			}
+		}
+	}
+	if a.workspaceID != "" {
+		for i, w := range list {
+			if w.ID == a.workspaceID && i != 0 {
+				active := list[i]
+				list = append(list[:i], list[i+1:]...)
+				list = append([]workspace.Workspace{active}, list...)
+				break
+			}
+		}
+	}
+	a.wsList = list
+	rows := a.tree()
+	if a.treeCursor >= len(rows) {
+		a.treeCursor = len(rows) - 1
+	}
+	if a.treeCursor < 0 {
+		a.treeCursor = 0
+	}
+}
+
+// treeRow is one rendered line in the tree pane. Kinds:
+//   - "action":  the "+ new session" row pinned at the top
+//   - "general": a session not bound to any workspace (lives in the
+//                default directory)
+//   - "ws":      a workspace folder (▸ collapsed / ▾ expanded)
+//   - "sess":    a session indented inside an expanded workspace
+type treeRow struct {
+	kind        string
+	workspaceID string
+	sessionID   string
+	wsName      string
+	sessName    string
+	wsExpanded  bool
+	sessCount   int
+}
+
+// tree flattens the model into rendering rows. Order is: action row, general
+// sessions, then workspaces (with their nested sessions when expanded).
+func (a *App) tree() []treeRow {
+	var rows []treeRow
+	rows = append(rows, treeRow{kind: "action"})
+	if a.sessStore != nil {
+		for _, s := range a.sessStore.List() {
+			if s.WorkspaceID == "" {
+				rows = append(rows, treeRow{
+					kind:      "general",
+					sessionID: s.ID,
+					sessName:  s.Name,
+				})
+			}
+		}
+	}
+	for _, w := range a.wsList {
+		count := 0
+		if a.sessStore != nil {
+			count = len(a.sessStore.ListByWorkspace(w.ID))
+		}
+		rows = append(rows, treeRow{
+			kind:        "ws",
+			workspaceID: w.ID,
+			wsName:      w.Name,
+			wsExpanded:  a.expanded[w.ID],
+			sessCount:   count,
+		})
+		if a.expanded[w.ID] && a.sessStore != nil {
+			// Static order: sessions render in store insertion order so the
+			// list doesn't reshuffle as you switch between them.
+			for _, s := range a.sessStore.ListByWorkspace(w.ID) {
+				rows = append(rows, treeRow{
+					kind:        "sess",
+					workspaceID: w.ID,
+					sessionID:   s.ID,
+					sessName:    s.Name,
+				})
+			}
+		}
+	}
+	return rows
+}
+
+// detectWorktreeBranch returns a home-shortened display path for cwd and the
+// current git branch. cwd is the directory to inspect; pass the active
+// session's effective cwd to keep the composer rule in sync. Empty cwd
+// falls back to os.Getwd().
+func detectWorktreeBranch(cwd string) (string, string) {
+	if cwd == "" {
+		c, err := os.Getwd()
+		if err != nil {
+			return "", ""
+		}
+		cwd = c
+	}
+	display := cwd
 	if home, err := os.UserHomeDir(); err == nil {
 		if cwd == home {
-			cwd = "~"
+			display = "~"
 		} else if strings.HasPrefix(cwd, home+string(os.PathSeparator)) {
-			cwd = "~" + cwd[len(home):]
+			display = "~" + cwd[len(home):]
 		}
 	}
 	branch := ""
 	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
+	cmd.Dir = cwd
 	if out, err := cmd.Output(); err == nil {
 		b := strings.TrimSpace(string(out))
 		if b != "" && b != "HEAD" {
 			branch = b
 		}
 	}
-	return cwd, branch
+	return display, branch
 }
 
-// openLog creates the session log file and updates the `last.jsonl` symlink.
-// Failures are logged into the transcript banner but do not abort startup.
+// sessionCWD resolves the directory a session's claude subprocess should run
+// in. Workspace sessions use their workspace's cwd; general sessions use the
+// configured default_dir (or, if unset/unresolvable, the launch cwd).
+func (a *App) sessionCWD(s session.Session) string {
+	if s.WorkspaceID != "" && a.wsStore != nil {
+		if w, err := a.wsStore.Get(s.WorkspaceID); err == nil {
+			return w.CWD
+		}
+	}
+	if dir := a.prefs.ResolveDefaultDir(); dir != "" {
+		return dir
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		return cwd
+	}
+	return ""
+}
+
+// openLog opens the per-session log file in append mode. The filename is
+// stable across activations (`<sessionUUID>.jsonl`) so the full conversation
+// history accumulates in one place — see hydrateFromLog for replay.
+//
+// Closes any previously-open log first. Failures surface as a transcript note.
 func (a *App) openLog() {
+	if a.sessionUUID == "" {
+		return
+	}
+	if a.logFile != nil {
+		_ = a.logFile.Close()
+		a.logFile = nil
+	}
 	dir, err := state.LogsDir()
 	if err != nil {
 		a.transcript.AddSystemNote("log dir unavailable: " + err.Error())
 		return
 	}
-	name := time.Now().UTC().Format("20060102T150405Z") + "-" + a.sessionUUID[:8] + ".jsonl"
-	path := filepath.Join(dir, name)
-	f, err := os.Create(path)
+	path := filepath.Join(dir, a.sessionUUID+".jsonl")
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o644)
 	if err != nil {
 		a.transcript.AddSystemNote("log open failed: " + err.Error())
 		return
@@ -158,7 +449,58 @@ func (a *App) openLog() {
 		"session_uuid":  a.sessionUUID,
 		"jflow_version": a.jflowVer,
 		"debug":         a.debug,
+		"workspace_id":  a.workspaceID,
 	})
+}
+
+// hydrateFromLog reads the per-session JSONL log and replays it so the
+// transcript reflects prior turns. Returns true if at least one claude
+// `result` event was replayed — the signal that claude has actually driven
+// this session before, which the caller uses to decide between --session-id
+// and --resume on the next spawn. Best-effort: per-line parse errors are
+// swallowed.
+func (a *App) hydrateFromLog() bool {
+	if a.logPath == "" {
+		return false
+	}
+	data, err := os.ReadFile(a.logPath)
+	if err != nil {
+		return false
+	}
+	driven := false
+	for _, line := range bytes.Split(data, []byte{'\n'}) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var meta struct {
+			Jflow string `json:"_jflow"`
+			Text  string `json:"text"`
+		}
+		if err := json.Unmarshal(line, &meta); err == nil && meta.Jflow != "" {
+			if meta.Jflow == "user_send" && meta.Text != "" {
+				a.transcript.AddUserMessage(meta.Text)
+			}
+			continue
+		}
+		ev, err := claude.ParseLine(line)
+		if err != nil || ev == nil {
+			continue
+		}
+		switch e := ev.(type) {
+		case claude.DriverExit, claude.ParseError:
+			continue
+		case claude.Result:
+			// Only count successful turns: an error result means claude
+			// rejected the spawn (e.g. "no conversation found"), which
+			// must NOT mark the session as driven — that'd lock us into
+			// --resume forever and the bug repeats.
+			if !e.IsError {
+				driven = true
+			}
+		}
+		a.applyEvent(ev)
+	}
+	return driven
 }
 
 // writeMeta appends a `_jflow` meta entry to the session log. Each entry has
@@ -186,7 +528,6 @@ func (a *App) LogPath() string { return a.logPath }
 // Init satisfies tea.Model. Returns textarea.Blink so the composer cursor
 // is properly managed (no double-cursor artifacts).
 func (a *App) Init() tea.Cmd {
-	a.transcript.AddSystemNote("new session " + a.sessionUUID[:8] + " — type a message and press enter")
 	return textarea.Blink
 }
 
@@ -222,8 +563,22 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		a.width = m.Width
 		a.height = m.Height
-		// Pane sizing is recomputed on every render in View(); nothing to
-		// do here beyond stashing the dimensions.
+		// Resize the chat viewport eagerly so its internal scroll model
+		// matches the new dimensions even before View() is next called.
+		// (View() will overwrite Width/Height again, but the Render done
+		// during this Update tick uses these values.)
+		_, centerW, _ := paneLayout(a.width)
+		innerW := centerW - 4
+		if innerW < 8 {
+			innerW = 8
+		}
+		a.viewport.SetWidth(innerW)
+		if a.height > 8 {
+			a.viewport.SetHeight(a.height - 6)
+		}
+		if a.debug {
+			a.writeMeta("resize", map[string]any{"w": a.width, "h": a.height})
+		}
 		return a, nil
 
 	case tea.MouseWheelMsg:
@@ -255,6 +610,46 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.showHelp = true
 			if a.debug {
 				a.writeMeta("key", map[string]any{"key": key, "context": "help_open"})
+			}
+			return a, nil
+		}
+		// Workspace add prompt overlay (textinput) takes priority — every
+		// keystroke flows through it until ⏎ confirms or esc cancels.
+		if a.wsPromptOpen {
+			cmd := a.handleWorkspacePromptKey(m)
+			return a, cmd
+		}
+		// Tab cycles focus left → composer → right → left. Shift+Tab walks
+		// the same ring backwards. Always intercept so the textarea never
+		// sees the key (otherwise shift+tab would type a literal).
+		if key == "tab" {
+			a.focus = a.cycleFocus(+1)
+			if a.focus == focusLeft {
+				a.wsRefresh()
+			}
+			return a, nil
+		}
+		if key == "shift+tab" {
+			a.focus = a.cycleFocus(-1)
+			if a.focus == focusLeft {
+				a.wsRefresh()
+			}
+			return a, nil
+		}
+		// While the tree pane has focus it owns navigation/edit keys; the
+		// composer is bypassed entirely.
+		if a.focus == focusLeft {
+			if cmd, handled := a.handleTreeKey(key); handled {
+				return a, cmd
+			}
+		} else if a.focus == focusRight {
+			// Right pane has no actions yet — only Tab/Shift+Tab/esc move
+			// out, everything else is a no-op so the composer doesn't catch
+			// stray typing.
+			switch key {
+			case "esc":
+				a.focus = focusComposer
+				return a, nil
 			}
 			return a, nil
 		}
@@ -302,6 +697,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, cmd
 		case "enter":
+			if a.sessionUUID == "" {
+				// No active session — composer should be hidden, but if a
+				// stray enter arrives just point the user at session create.
+				return a, nil
+			}
 			if a.driver != nil || a.spawning {
 				if a.debug {
 					a.writeMeta("key", map[string]any{"key": key, "context": "ignored_busy"})
@@ -422,6 +822,7 @@ func (a *App) send(text string) tea.Cmd {
 		SessionID: a.sessionUUID,
 		Resume:    !a.firstTurn,
 		Prompt:    text,
+		CWD:       a.activeCWD,
 		LogWriter: a.logFile,
 	}
 	a.firstTurn = false
@@ -528,6 +929,383 @@ func (a *App) recallNext() {
 		return
 	}
 	a.composer.SetValue(a.history[a.histIdx])
+}
+
+// handleTreeKey processes keypresses while the tree pane is focused.
+// j/k/↑/↓: move cursor · l/→: expand workspace · h/←: collapse (or jump up
+// to parent on a session) · ⏎: toggle workspace expansion / activate
+// session · n: new session in workspace (creates the workspace's first
+// session if needed) · a: add a new workspace via path prompt · x: delete
+// with y/N confirm · tab/esc: blur back to composer.
+func (a *App) handleTreeKey(key string) (tea.Cmd, bool) {
+	if a.wsStore == nil {
+		a.focus = focusComposer
+		return nil, false
+	}
+	rows := a.tree()
+
+	// Delete confirmation gates everything else — y/Y removes, n/N/esc bails.
+	if a.treeConfirmDel {
+		switch key {
+		case "y", "Y":
+			id, kind := a.treePendingID, a.treePendingKnd
+			a.treeConfirmDel = false
+			a.treePendingID = ""
+			a.treePendingKnd = ""
+			a.deleteTreeNode(id, kind)
+			a.wsRefresh()
+			// If we just deleted the active session, fall back to the most
+			// recent remaining session in the launch workspace (or create a
+			// fresh "default") so the chat stays available.
+			if a.sessionUUID == "" {
+				a.ensureActiveSession()
+			}
+			return nil, true
+		case "n", "N", "esc":
+			a.treeConfirmDel = false
+			a.treePendingID = ""
+			a.treePendingKnd = ""
+			return nil, true
+		}
+		return nil, true
+	}
+
+	switch key {
+	case "tab":
+		a.focus = a.cycleFocus(+1)
+		return nil, true
+	case "shift+tab":
+		a.focus = a.cycleFocus(-1)
+		return nil, true
+	case "esc":
+		a.focus = focusComposer
+		return nil, true
+	case "up", "k":
+		if a.treeCursor > 0 {
+			a.treeCursor--
+		}
+		return nil, true
+	case "down", "j":
+		if a.treeCursor < len(rows)-1 {
+			a.treeCursor++
+		}
+		return nil, true
+	case "right", "l":
+		if cur, ok := a.curRow(rows); ok && cur.kind == "ws" && !cur.wsExpanded {
+			a.expanded[cur.workspaceID] = true
+		}
+		return nil, true
+	case "left", "h":
+		if cur, ok := a.curRow(rows); ok {
+			if cur.kind == "ws" && cur.wsExpanded {
+				a.expanded[cur.workspaceID] = false
+			} else if cur.kind == "sess" {
+				for i := a.treeCursor - 1; i >= 0; i-- {
+					if rows[i].kind == "ws" && rows[i].workspaceID == cur.workspaceID {
+						a.treeCursor = i
+						break
+					}
+				}
+			}
+		}
+		return nil, true
+	case "enter":
+		if cur, ok := a.curRow(rows); ok {
+			switch cur.kind {
+			case "action":
+				a.createGeneralSession()
+			case "ws":
+				a.expanded[cur.workspaceID] = !a.expanded[cur.workspaceID]
+			case "general", "sess":
+				a.activateSession(cur.sessionID)
+			}
+		}
+		return nil, true
+	case "a":
+		a.openWorkspacePrompt()
+		return textinput.Blink, true
+	case "n":
+		// `n` on the action row or any general session creates another
+		// general session (default-dir, no workspace). On a workspace or
+		// workspace session, it creates a session in that workspace.
+		cur, ok := a.curRow(rows)
+		if !ok || cur.kind == "action" || cur.kind == "general" {
+			a.createGeneralSession()
+			return nil, true
+		}
+		a.createSessionIn(cur.workspaceID)
+		return nil, true
+	case "x":
+		cur, ok := a.curRow(rows)
+		if !ok || cur.kind == "action" {
+			return nil, true
+		}
+		a.treeConfirmDel = true
+		if cur.kind == "ws" {
+			a.treePendingID = cur.workspaceID
+			a.treePendingKnd = "ws"
+		} else {
+			a.treePendingID = cur.sessionID
+			a.treePendingKnd = "sess"
+		}
+		return nil, true
+	}
+	return nil, true
+}
+
+// curRow returns the tree row under the cursor, or false if the tree is
+// empty / cursor is out of range.
+func (a *App) curRow(rows []treeRow) (treeRow, bool) {
+	if a.treeCursor < 0 || a.treeCursor >= len(rows) {
+		return treeRow{}, false
+	}
+	return rows[a.treeCursor], true
+}
+
+// createGeneralSession adds a session not bound to any workspace — a "default
+// directory" chat. Activates it and parks the cursor on the new row.
+func (a *App) createGeneralSession() {
+	if a.sessStore == nil {
+		return
+	}
+	count := 0
+	for _, s := range a.sessStore.List() {
+		if s.WorkspaceID == "" {
+			count++
+		}
+	}
+	name := fmt.Sprintf("session %d", count+1)
+	s := session.New("", name)
+	if err := a.sessStore.Add(s); err != nil {
+		a.transcript.AddSystemNote("session add failed: " + err.Error())
+		return
+	}
+	a.activateSession(s.ID)
+	for i, r := range a.tree() {
+		if r.kind == "general" && r.sessionID == s.ID {
+			a.treeCursor = i
+			break
+		}
+	}
+	if a.debug {
+		a.writeMeta("session_create", map[string]any{"id": s.ID, "name": s.Name, "general": true})
+	}
+}
+
+// createSessionIn adds a new session under the given workspace, expands it,
+// activates the session, and refreshes the cursor onto the new row.
+func (a *App) createSessionIn(workspaceID string) {
+	if a.sessStore == nil || workspaceID == "" {
+		return
+	}
+	count := len(a.sessStore.ListByWorkspace(workspaceID))
+	name := fmt.Sprintf("session %d", count+1)
+	s := session.New(workspaceID, name)
+	if err := a.sessStore.Add(s); err != nil {
+		a.transcript.AddSystemNote("session add failed: " + err.Error())
+		return
+	}
+	a.expanded[workspaceID] = true
+	a.activateSession(s.ID)
+	// Move the tree cursor to the new session row so x/⏎ act on it next.
+	rows := a.tree()
+	for i, r := range rows {
+		if r.kind == "sess" && r.sessionID == s.ID {
+			a.treeCursor = i
+			break
+		}
+	}
+	if a.debug {
+		a.writeMeta("session_create", map[string]any{"id": s.ID, "name": s.Name, "workspace_id": workspaceID})
+	}
+}
+
+// deleteTreeNode removes a workspace (cascading its sessions) or a single
+// session and clears chat state if the active session is touched.
+func (a *App) deleteTreeNode(id, kind string) {
+	switch kind {
+	case "ws":
+		if a.sessStore != nil {
+			for _, s := range a.sessStore.ListByWorkspace(id) {
+				_ = a.sessStore.Remove(s.ID)
+				if s.ID == a.sessionUUID {
+					a.deactivateSession()
+				}
+			}
+		}
+		if err := a.wsStore.Remove(id); err != nil {
+			a.transcript.AddSystemNote("workspace remove failed: " + err.Error())
+		}
+		delete(a.expanded, id)
+		if a.debug {
+			a.writeMeta("ws_remove", map[string]any{"id": id})
+		}
+	case "sess":
+		if a.sessStore == nil {
+			return
+		}
+		if err := a.sessStore.Remove(id); err != nil {
+			a.transcript.AddSystemNote("session remove failed: " + err.Error())
+			return
+		}
+		if id == a.sessionUUID {
+			a.deactivateSession()
+		}
+		if a.debug {
+			a.writeMeta("session_remove", map[string]any{"id": id})
+		}
+	}
+}
+
+// openWorkspacePrompt initialises the path textinput with the launch cwd and
+// makes the bottom-sheet overlay visible. Caller is expected to also return
+// textinput.Blink so the cursor renders.
+func (a *App) openWorkspacePrompt() {
+	cwd, _ := os.Getwd()
+	ti := textinput.New()
+	ti.Placeholder = "/path/to/folder"
+	ti.SetValue(cwd)
+	ti.CharLimit = 0
+	ti.SetWidth(40)
+	ti.Focus()
+	a.wsPromptInput = ti
+	a.wsPromptOpen = true
+}
+
+// handleWorkspacePromptKey runs while the path prompt is open. ⏎ confirms,
+// esc cancels, everything else flows into the textinput.
+func (a *App) handleWorkspacePromptKey(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		a.wsPromptOpen = false
+		return nil
+	case "enter":
+		raw := strings.TrimSpace(a.wsPromptInput.Value())
+		a.wsPromptOpen = false
+		if raw == "" {
+			return nil
+		}
+		path, err := filepath.Abs(expandHome(raw))
+		if err != nil {
+			a.transcript.AddSystemNote("workspace add: " + err.Error())
+			return nil
+		}
+		w, created, err := a.wsStore.EnsureForCWD(path)
+		if err != nil {
+			a.transcript.AddSystemNote("workspace add failed: " + err.Error())
+			return nil
+		}
+		if !created {
+			a.transcript.AddSystemNote("workspace already exists: " + w.Name)
+		}
+		a.expanded[w.ID] = true
+		a.wsRefresh()
+		// Park the tree cursor on the new workspace so ⏎/n act on it.
+		for i, r := range a.tree() {
+			if r.kind == "ws" && r.workspaceID == w.ID {
+				a.treeCursor = i
+				break
+			}
+		}
+		if a.debug && created {
+			a.writeMeta("ws_add", map[string]any{"id": w.ID, "name": w.Name, "cwd": w.CWD})
+		}
+		return nil
+	}
+	var cmd tea.Cmd
+	a.wsPromptInput, cmd = a.wsPromptInput.Update(msg)
+	return cmd
+}
+
+// activateSession loads the session with the given id as the active chat.
+// Resets the in-memory transcript, usage, and rotates the log file. If the
+// session id matches a brand-new session never seen by claude, firstTurn is
+// true so the next send uses --session-id; otherwise --resume picks up.
+func (a *App) activateSession(id string) {
+	if a.sessStore == nil {
+		return
+	}
+	s, err := a.sessStore.Get(id)
+	if err != nil {
+		a.transcript.AddSystemNote("session not found: " + err.Error())
+		return
+	}
+	// Closing the previous session's claude turn is harsh; instead, just
+	// refuse to switch while a turn is mid-flight to keep state coherent.
+	if a.driver != nil || a.spawning {
+		a.transcript.AddSystemNote("can't switch session while a turn is running — cancel first (⌃C)")
+		return
+	}
+	_ = a.sessStore.Touch(id)
+	a.sessionUUID = s.ID
+	a.transcript = Transcript{}
+	a.tokens = 0
+	a.costUSD = 0
+	a.banner = ""
+	a.activeCWD = a.sessionCWD(s)
+	a.worktree, a.branch = detectWorktreeBranch(a.activeCWD)
+	a.openLog()
+	// Replay prior turns from the per-session log. driven == true when
+	// claude has produced at least one successful result for this session;
+	// that's the signal to use --resume on the next spawn. Otherwise we
+	// must use --session-id, even on later jflow launches, until claude
+	// actually accepts a turn.
+	driven := a.hydrateFromLog()
+	a.firstTurn = !driven
+	a.transcript.AddSystemNote("session " + s.Name + " — " + s.ID[:8])
+	// Don't change focus here — the caller decides. Activating from the
+	// tree should keep focus in the tree so the user can keep navigating
+	// without an extra Tab.
+	if a.debug {
+		a.writeMeta("session_activate", map[string]any{"id": s.ID, "name": s.Name})
+	}
+}
+
+// deactivateSession clears the active session — chat hides, composer hides.
+func (a *App) deactivateSession() {
+	if a.logFile != nil {
+		_ = a.logFile.Close()
+		a.logFile = nil
+	}
+	a.sessionUUID = ""
+	a.firstTurn = true
+	a.transcript = Transcript{}
+	a.tokens = 0
+	a.costUSD = 0
+	a.banner = ""
+	a.model = ""
+	a.permMode = ""
+}
+
+// renderWsPrompt builds the bottom-sheet overlay shown while the workspace
+// path prompt is open. Width is the inner-chat-column width (caller indents
+// for the column padding).
+func (a *App) renderWsPrompt(width int) string {
+	if width < 8 {
+		width = 8
+	}
+	a.wsPromptInput.SetWidth(width - 6)
+	title := a.theme.Accent.Render("new workspace")
+	hint := a.theme.Dim.Render("⏎ create  ·  esc cancel")
+	return title + "\n  " + a.wsPromptInput.View() + "\n" + hint
+}
+
+// expandHome expands a leading ~ in the given path against $HOME.
+func expandHome(p string) string {
+	if p == "" || p[0] != '~' {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	if p == "~" {
+		return home
+	}
+	if len(p) > 1 && (p[1] == '/' || p[1] == os.PathSeparator) {
+		return filepath.Join(home, p[2:])
+	}
+	return p
 }
 
 // cancelTurn aborts whatever turn-related work is currently running.
@@ -687,6 +1465,7 @@ func (a *App) View() tea.View {
 		innerCenterW = 8
 	}
 
+
 	// Composer text width: 2 cells for the "> " prompt, the rest for input.
 	composerInnerW := innerCenterW - 2
 	if composerInnerW < 4 {
@@ -695,17 +1474,13 @@ func (a *App) View() tea.View {
 
 	// Bottom row: a full-width `─` rule (with worktree/branch label) followed
 	// by the composer, with the help cheatsheet (when toggled) tucked
-	// directly underneath. The rule spans the entire chat column; the
-	// content beneath is inset by chatPadH on each side.
+	// directly underneath, and a single-line hint bar at the very bottom
+	// that surfaces context-aware keybinds for the focused pane.
 	rule := a.composerRule(centerW)
-	const hintText = "? for help"
-	hintLen := len(hintText) + 1 // 1 col separator before the hint
-	taW := composerInnerW - hintLen
+	taW := composerInnerW
 	if taW < 4 {
 		taW = 4
 	}
-	// On very short terminals, cap the composer below its hard max so
-	// the transcript still has a usable viewport.
 	maxRows := composerMaxRows
 	if h3 := a.height / 3; h3 > 0 && h3 < maxRows {
 		maxRows = h3
@@ -717,32 +1492,31 @@ func (a *App) View() tea.View {
 		composerH = 1
 	}
 	taLines := strings.Split(a.composer.View(), "\n")
-	hint := a.theme.Dim.Render(hintText)
 	composerLines := make([]string, len(taLines))
 	for i, l := range taLines {
 		prefix := "  "
 		if i == 0 {
 			prefix = a.theme.Fg.Render("> ")
 		}
-		line := prefix + l
-		pad := innerCenterW - lipgloss.Width(line) - lipgloss.Width(hint)
-		if pad < 1 {
-			pad = 1
-		}
-		if i == 0 {
-			line += strings.Repeat(" ", pad) + hint
-		}
-		composerLines[i] = line
+		composerLines[i] = prefix + l
 	}
 	bottomBody := indentLines(strings.Join(composerLines, "\n"), chatPadH)
 	bottomH := 1 + composerH
-	if a.showHelp {
-		sheet := renderHelpSheet(a.theme, innerCenterW)
+	if a.wsPromptOpen {
+		overlay := a.renderWsPrompt(innerCenterW)
+		oH := strings.Count(overlay, "\n") + 1
+		bottomBody += "\n" + indentLines(overlay, chatPadH)
+		bottomH += oH
+	} else if a.showHelp {
+		help := a.helpForFocus()
+		sheet := renderHelpSheetWith(a.theme, innerCenterW, help)
 		sheetH := strings.Count(sheet, "\n") + 1
 		bottomBody += "\n" + indentLines(sheet, chatPadH)
 		bottomH += sheetH
 	}
-	bottom := rule + "\n" + bottomBody
+	hintBar := renderHintBar(a, centerW)
+	bottom := rule + "\n" + bottomBody + "\n" + hintBar
+	bottomH += 1
 
 	// Center column: transcript + bottom (composer/sheet). No header, no
 	// background fill — the chat column is just terminal default. Reserve
@@ -793,7 +1567,7 @@ func (a *App) View() tea.View {
 	if leftW == 0 && rightW == 0 {
 		content = center
 	} else {
-		left := renderLeftPane(a.theme, leftW, a.height)
+		left := renderLeftPane(a, leftW, a.height)
 		right := renderRightPane(a, rightW, a.height)
 		content = lipgloss.JoinHorizontal(lipgloss.Top, left, center, right)
 	}

@@ -1,9 +1,15 @@
 package cmd
 
 import (
+	"os"
+
 	tea "charm.land/bubbletea/v2"
-	"github.com/oobagi/jflow/internal/ui"
 	"github.com/spf13/cobra"
+
+	"github.com/oobagi/jflow/internal/config"
+	"github.com/oobagi/jflow/internal/session"
+	"github.com/oobagi/jflow/internal/ui"
+	"github.com/oobagi/jflow/internal/workspace"
 )
 
 const Version = "0.0.1-dev"
@@ -18,11 +24,33 @@ var rootCmd = &cobra.Command{
 	SilenceUsage:  true,
 	SilenceErrors: true,
 	RunE: func(c *cobra.Command, args []string) error {
-		m := ui.NewApp(debugFlag, Version)
+		wsStore, wsID := bootstrapWorkspace()
+		sessStore, _ := session.OpenDefault()
+		prefs, _ := config.LoadDefault()
+		m := ui.NewApp(debugFlag, Version, wsStore, sessStore, prefs, wsID)
 		p := tea.NewProgram(m)
 		_, err := p.Run()
 		return err
 	},
+}
+
+// bootstrapWorkspace opens the workspace store and ensures a workspace for the
+// launch cwd. Failures are non-fatal — a nil store / empty ID is allowed so
+// the TUI still launches; the left pane just renders empty.
+func bootstrapWorkspace() (*workspace.Store, string) {
+	store, err := workspace.OpenDefault()
+	if err != nil {
+		return nil, ""
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return store, ""
+	}
+	w, _, err := store.EnsureForCWD(cwd)
+	if err != nil {
+		return store, ""
+	}
+	return store, w.ID
 }
 
 func init() {
