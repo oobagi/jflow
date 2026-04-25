@@ -65,8 +65,14 @@ func (t *Transcript) OnContentBlockStart(idx int, cb claude.ContentBlock) {
 		b.Kind = BlockToolUse
 		b.ToolName = cb.Name
 		b.ToolID = cb.ID
-		if len(cb.Input) > 0 {
-			b.ToolArgs = string(cb.Input)
+		// stream_event content_block_start carries an empty `input: {}`
+		// — seeding ToolArgs with that and then appending input_json_delta
+		// payloads produces invalid JSON like `{}{"command":"..."}` that
+		// won't unmarshal, so the tool translator falls back to the
+		// generic verb forever. Only seed when the start event genuinely
+		// supplied non-empty input (e.g. from a non-streaming source).
+		if s := strings.TrimSpace(string(cb.Input)); s != "" && s != "{}" {
+			b.ToolArgs = s
 		}
 	default:
 		b.Kind = BlockSystem
