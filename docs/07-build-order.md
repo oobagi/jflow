@@ -63,9 +63,11 @@ Acceptance: `jflow run autopilot` works through 3 issues without context bloat; 
 
 ## Phase 4 — port the rest of the jflow suite
 
-In rough order of value:
+MVP (needed to actually dogfood the harness end-to-end):
 1. `next` — pick + work one item
 2. `ship` — branch, commit, PR, merge, cleanup
+
+Post-MVP (tracked, not on the critical path; the existing Claude Code skills cover these until ports land):
 3. `polish` — pipeline (composes simplify/harden/test as Claude Code skills)
 4. `qa` — feature testing
 5. `release` — preview/production releases

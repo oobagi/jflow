@@ -127,20 +127,32 @@ func (t *Transcript) Render(theme Theme, width int) string {
 			rendered := wrapWithPrefix(b.Text, theme.AsstPrefix.Render("claude ▸ "), "         ", width)
 			lines = append(lines, strings.Split(rendered, "\n")...)
 		case BlockThinking:
+			// Claude Code returns "encrypted" thinking blocks — only a
+			// signature comes back, never the reasoning text — so most
+			// thinking blocks have an empty body. Render just the header
+			// in that case to avoid an orphan "│" with nothing under it.
 			lines = append(lines, theme.Thinking.Render("✱ thinking"))
-			body := wrapToWidth(b.Text, width-2)
-			for _, p := range strings.Split(body, "\n") {
-				lines = append(lines, theme.Thinking.Render("│ "+p))
+			if body := strings.TrimSpace(b.Text); body != "" {
+				wrapped := wrapToWidth(body, width-2)
+				for _, p := range strings.Split(wrapped, "\n") {
+					lines = append(lines, theme.Thinking.Render("│ "+p))
+				}
 			}
 		case BlockToolUse:
-			lines = append(lines, theme.ToolHeader.Render(fmt.Sprintf("⚙ %s", b.ToolName)))
-			args := strings.TrimSpace(b.ToolArgs)
-			if args == "" {
-				args = "{}"
-			}
-			body := wrapToWidth(args, width-2)
-			for _, p := range strings.Split(body, "\n") {
-				lines = append(lines, theme.ToolBody.Render("│ "+p))
+			head, ok := translateToolCall(b.ToolName, b.ToolArgs)
+			if ok {
+				rendered := wrapWithPrefix(head, theme.ToolHeader.Render("⚙ "), "  ", width)
+				lines = append(lines, strings.Split(rendered, "\n")...)
+			} else {
+				lines = append(lines, theme.ToolHeader.Render(fmt.Sprintf("⚙ %s", b.ToolName)))
+				args := strings.TrimSpace(b.ToolArgs)
+				if args == "" {
+					args = "{}"
+				}
+				body := wrapToWidth(args, width-2)
+				for _, p := range strings.Split(body, "\n") {
+					lines = append(lines, theme.ToolBody.Render("│ "+p))
+				}
 			}
 		case BlockSystem:
 			body := wrapWithPrefix(b.Text, "· ", "  ", width)

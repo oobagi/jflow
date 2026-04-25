@@ -94,7 +94,6 @@ A user can type during a streaming assistant turn — their message queues and i
 | `⏎` | open / send |
 | `^C` | interrupt current claude turn |
 | `^K` | compact now |
-| `^L` | clear screen redraw |
 | `g/G` | top / bottom of transcript |
 
 ## Theme

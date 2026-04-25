@@ -37,12 +37,11 @@
 │   ├── ui/
 │   │   ├── app.go                     root bubbletea model; pane router
 │   │   ├── workspace_list.go          left pane (workspaces + sessions nested)
-│   │   ├── session_view.go            center pane (transcript + composer + status + banner)
+│   │   ├── session_view.go            center pane (transcript + composer + status)
 │   │   ├── todopane/                  right pane — flat todo list with active indicator
 │   │   ├── transcript.go              renders text/thinking/tool_use blocks
 │   │   ├── composer.go                multiline input; pushes to driver stdin
-│   │   ├── statusbar.go               model | tokens/ctx | $cost | rate limit | mode
-│   │   ├── banner.go                  chat header — tool · model · cwd + ▸ working on: <todo>
+│   │   ├── statusbar.go               model | tokens/ctx | $cost | rate limit | mode | ▸ working on: <todo>
 │   │   ├── theme.go                   lipgloss styles (dark/light)
 │   │   ├── keys.go                    keybindings + help generation
 │   │   └── help.go
