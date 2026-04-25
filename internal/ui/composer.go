@@ -86,6 +86,10 @@ func (c Composer) Value() string { return c.ta.Value() }
 // Reset clears the composer.
 func (c *Composer) Reset() { c.ta.Reset() }
 
+// SetValue replaces the composer contents with s. Used by history recall to
+// load a previously-sent message into the input.
+func (c *Composer) SetValue(s string) { c.ta.SetValue(s) }
+
 // Update handles textarea events.
 func (c *Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
 	var cmd tea.Cmd

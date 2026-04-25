@@ -71,6 +71,15 @@ type App struct {
 	logFile    *os.File
 	logPath    string
 	jflowVer   string
+
+	// In-memory history of user sends for ↑/↓ recall (#29). Current-session
+	// only — cross-session recall is out of scope for v0. Pointer semantics:
+	//   histIdx == len(history)  → not recalling (composer reflects user input)
+	//   histIdx <  len(history)  → recalling history[histIdx]
+	// Any keypress that mutates the composer (i.e. typing) resets histIdx
+	// back to len(history) so the next ↑ starts from the most-recent send.
+	history []string
+	histIdx int
 }
 
 // NewApp constructs the App with a fresh session uuid.
@@ -262,6 +271,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if a.cancelTurn(key) {
 				return a, nil
 			}
+			// While in history recall (#29), esc first clears the recalled
+			// text and exits recall mode rather than quitting — a second
+			// esc on an empty/idle composer then falls through to quit.
+			if a.recalling() {
+				a.histIdx = len(a.history)
+				a.composer.Reset()
+				if a.debug {
+					a.writeMeta("key", map[string]any{"key": key, "context": "history_cancel"})
+				}
+				return a, nil
+			}
 			a.writeMeta("session_end", map[string]any{
 				"session_uuid": a.sessionUUID,
 				"reason":       "user_quit",
@@ -297,7 +317,44 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.writeMeta("key", map[string]any{"key": key, "context": "send"})
 			}
 			return a, a.send(text)
+		case "up":
+			// History recall (#29). Only intercept when the composer is
+			// empty (nothing to lose) or when we're already navigating
+			// recall (so successive ↑ walk further back). Otherwise fall
+			// through so the textarea moves the cursor up between lines.
+			// While recalling, consume the keypress even if we're already
+			// at the oldest entry — otherwise the typing-detection branch
+			// below would reset histIdx and silently exit recall mode
+			// while leaving the recalled text in the composer, which then
+			// breaks the next ↓.
+			if a.recalling() {
+				a.recallPrev()
+				if a.debug {
+					a.writeMeta("key", map[string]any{"key": key, "context": "history_prev"})
+				}
+				return a, nil
+			}
+			if a.composer.IsEmpty() {
+				if a.recallPrev() {
+					if a.debug {
+						a.writeMeta("key", map[string]any{"key": key, "context": "history_prev"})
+					}
+					return a, nil
+				}
+			}
+		case "down":
+			if a.recalling() {
+				a.recallNext()
+				if a.debug {
+					a.writeMeta("key", map[string]any{"key": key, "context": "history_next"})
+				}
+				return a, nil
+			}
 		}
+		// Any other keypress that reaches the composer counts as "typing"
+		// and resets the recall pointer so the next ↑ starts fresh from
+		// the most-recent send (#29).
+		a.histIdx = len(a.history)
 		if a.debug {
 			a.writeMeta("key", map[string]any{"key": key})
 		}
@@ -352,6 +409,13 @@ func (a *App) send(text string) tea.Cmd {
 		"session_uuid": a.sessionUUID,
 		"text":         text,
 	})
+	// Push onto the in-memory history ring and reset the recall pointer
+	// (#29). De-dup against the most-recent entry so repeated identical
+	// sends don't bloat the ring.
+	if n := len(a.history); n == 0 || a.history[n-1] != text {
+		a.history = append(a.history, text)
+	}
+	a.histIdx = len(a.history)
 	ctx, cancel := context.WithCancel(context.Background())
 	a.cancel = cancel
 	opts := claude.SpawnOpts{
@@ -430,6 +494,39 @@ func formatDuration(ms int64) string {
 	m := int(secs) / 60
 	s := int(secs) % 60
 	return fmt.Sprintf("%dm %ds", m, s)
+}
+
+// recalling returns true when the composer currently displays a message
+// pulled from the history ring (i.e. the user is mid-recall).
+func (a *App) recalling() bool {
+	return a.histIdx < len(a.history)
+}
+
+// recallPrev walks one step back in history and loads that message into
+// the composer. Returns false when there's nothing older to show (so the
+// caller can fall through to the default keypress handling).
+func (a *App) recallPrev() bool {
+	if len(a.history) == 0 || a.histIdx == 0 {
+		return false
+	}
+	a.histIdx--
+	a.composer.SetValue(a.history[a.histIdx])
+	return true
+}
+
+// recallNext walks one step forward in history. Stepping past the newest
+// entry empties the composer and exits recall mode (histIdx == len).
+func (a *App) recallNext() {
+	if !a.recalling() {
+		return
+	}
+	a.histIdx++
+	if a.histIdx >= len(a.history) {
+		a.histIdx = len(a.history)
+		a.composer.Reset()
+		return
+	}
+	a.composer.SetValue(a.history[a.histIdx])
 }
 
 // cancelTurn aborts whatever turn-related work is currently running.
