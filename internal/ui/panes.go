@@ -196,15 +196,13 @@ func compactInt(n int) string {
 	return fmt.Sprintf("%.1fM", float64(n)/1_000_000)
 }
 
-// renderHelpSheet produces the bottom-sheet help panel that replaces the
-// composer when `?` is pressed. The sheet shares the chat column's width so
-// it doesn't bleed into the gutters; its top rule spans the full column.
-func renderHelpSheet(theme Theme, width, height int) string {
+// renderHelpSheet produces the keybinding cheatsheet that pops up under the
+// composer when `?` is pressed. It sizes naturally to its content (no
+// trailing padding, no title) so it slots in below the input without
+// pushing the transcript away further than necessary.
+func renderHelpSheet(theme Theme, width int) string {
 	if width < 1 {
 		width = 1
-	}
-	if height < 1 {
-		height = 1
 	}
 	bindings := DefaultHelp()
 
@@ -224,11 +222,9 @@ func renderHelpSheet(theme Theme, width, height int) string {
 	}
 	rows := (len(bindings) + cols - 1) / cols
 
-	title := theme.Accent.Render("keybindings")
 	hint := theme.Dim.Render("? or esc to close")
 
 	var sb strings.Builder
-	sb.WriteString(title + "\n")
 	for r := 0; r < rows; r++ {
 		for c := 0; c < cols; c++ {
 			idx := r + c*rows
@@ -247,5 +243,5 @@ func renderHelpSheet(theme Theme, width, height int) string {
 	}
 	sb.WriteString(hint)
 
-	return lipgloss.NewStyle().Width(width).Height(height).Render(sb.String())
+	return sb.String()
 }

@@ -228,20 +228,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyPressMsg:
 		key := m.String()
-		// Help overlay swallows all keys except the toggles that close it.
+		// Help is a non-modal cheatsheet that pops up under the composer:
+		// `?` and `esc` close it, but every other key keeps flowing through
+		// to the composer so the user can keep typing while it's open.
 		if a.showHelp {
 			switch key {
-			case "?", "esc", "ctrl+c":
+			case "?", "esc":
 				a.showHelp = false
 				if a.debug {
 					a.writeMeta("key", map[string]any{"key": key, "context": "help_close"})
 				}
+				return a, nil
 			}
-			return a, nil
-		}
-		// Open help only when the composer is empty so the user can still
-		// type "?" in a message.
-		if key == "?" && a.composer.IsEmpty() {
+		} else if key == "?" && a.composer.IsEmpty() {
+			// Open help only when the composer is empty so the user can still
+			// type "?" in a message.
 			a.showHelp = true
 			if a.debug {
 				a.writeMeta("key", map[string]any{"key": key, "context": "help_open"})
@@ -580,56 +581,55 @@ func (a *App) View() tea.View {
 	if composerInnerW < 4 {
 		composerInnerW = 4
 	}
-	composerH := a.composer.LineCount()
+
+	// Bottom row: a full-width `─` rule (with worktree/branch label) followed
+	// by the composer, with the help cheatsheet (when toggled) tucked
+	// directly underneath. The rule spans the entire chat column; the
+	// content beneath is inset by chatPadH on each side.
+	rule := a.composerRule(centerW)
+	const hintText = "? for help"
+	hintLen := len(hintText) + 1 // 1 col separator before the hint
+	taW := composerInnerW - hintLen
+	if taW < 4 {
+		taW = 4
+	}
+	// On very short terminals, cap the composer below its hard max so
+	// the transcript still has a usable viewport.
+	maxRows := composerMaxRows
+	if h3 := a.height / 3; h3 > 0 && h3 < maxRows {
+		maxRows = h3
+	}
+	a.composer.SetMaxHeight(maxRows)
+	a.composer.SetWidth(taW)
+	composerH := a.composer.Height()
 	if composerH < 1 {
 		composerH = 1
 	}
-	if maxH := a.height / 3; composerH > maxH && maxH > 1 {
-		composerH = maxH
+	taLines := strings.Split(a.composer.View(), "\n")
+	hint := a.theme.Dim.Render(hintText)
+	composerLines := make([]string, len(taLines))
+	for i, l := range taLines {
+		prefix := "  "
+		if i == 0 {
+			prefix = a.theme.Fg.Render("> ")
+		}
+		line := prefix + l
+		pad := innerCenterW - lipgloss.Width(line) - lipgloss.Width(hint)
+		if pad < 1 {
+			pad = 1
+		}
+		if i == 0 {
+			line += strings.Repeat(" ", pad) + hint
+		}
+		composerLines[i] = line
 	}
-
-	// Bottom row: a full-width `─` rule (with worktree/branch label) followed
-	// by either the composer or the help sheet. The rule spans the entire
-	// chat column; the content beneath is inset by chatPadH on each side.
-	rule := a.composerRule(centerW)
-	var bottomBody string
-	var bottomH int
+	bottomBody := indentLines(strings.Join(composerLines, "\n"), chatPadH)
+	bottomH := 1 + composerH
 	if a.showHelp {
-		sheetH := len(DefaultHelp())/3 + 4 // -1 because rule is rendered separately
-		if sheetH > a.height/2 {
-			sheetH = a.height / 2
-		}
-		bottomBody = indentLines(renderHelpSheet(a.theme, innerCenterW, sheetH), chatPadH)
-		bottomH = 1 + sheetH
-	} else {
-		const hintText = "? for help"
-		hintLen := len(hintText) + 1 // 1 col separator before the hint
-		taW := composerInnerW - hintLen
-		if taW < 4 {
-			taW = 4
-		}
-		a.composer.SetWidth(taW)
-		a.composer.SetHeight(composerH)
-		taLines := strings.Split(a.composer.View(), "\n")
-		hint := a.theme.Dim.Render(hintText)
-		composerLines := make([]string, len(taLines))
-		for i, l := range taLines {
-			prefix := "  "
-			if i == 0 {
-				prefix = a.theme.Fg.Render("> ")
-			}
-			line := prefix + l
-			pad := innerCenterW - lipgloss.Width(line) - lipgloss.Width(hint)
-			if pad < 1 {
-				pad = 1
-			}
-			if i == 0 {
-				line += strings.Repeat(" ", pad) + hint
-			}
-			composerLines[i] = line
-		}
-		bottomBody = indentLines(strings.Join(composerLines, "\n"), chatPadH)
-		bottomH = 1 + composerH
+		sheet := renderHelpSheet(a.theme, innerCenterW)
+		sheetH := strings.Count(sheet, "\n") + 1
+		bottomBody += "\n" + indentLines(sheet, chatPadH)
+		bottomH += sheetH
 	}
 	bottom := rule + "\n" + bottomBody
 

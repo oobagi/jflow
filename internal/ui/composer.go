@@ -8,6 +8,12 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// composerMaxRows caps the composer's visible viewport so it never eats
+// more than ~10 visual rows of the chat column. Beyond this the textarea
+// scrolls internally rather than pushing the transcript off-screen — the
+// content itself isn't capped, only the viewport.
+const composerMaxRows = 10
+
 // Composer wraps a textarea for multiline user input.
 //
 // Prompt is intentionally empty — the textarea would otherwise repeat the
@@ -39,27 +45,37 @@ func NewComposer() Composer {
 	styles.Blurred.Placeholder = placeholder
 	t.SetStyles(styles)
 
+	// Auto-grow with content (counting soft wraps) up to composerMaxRows.
+	// MaxContentHeight is intentionally left unset — capping it would block
+	// further input once the viewport fills up. MaxHeight only caps the
+	// visible viewport, so longer content scrolls internally.
+	t.DynamicHeight = true
+	t.MinHeight = 1
+	t.MaxHeight = composerMaxRows
+
 	t.SetWidth(80)
 	t.SetHeight(1)
 	t.Focus()
 	return Composer{ta: t}
 }
 
-// SetWidth resizes the composer.
+// SetWidth resizes the composer. With DynamicHeight enabled, this also
+// re-runs the wrap calculation so Height() reflects the new soft-wrap.
 func (c *Composer) SetWidth(w int) { c.ta.SetWidth(w) }
 
-// SetHeight resizes the composer's vertical capacity.
-func (c *Composer) SetHeight(h int) { c.ta.SetHeight(h) }
-
-// LineCount returns the number of soft-wrapped logical lines in the current
-// value. Used by App to grow the composer as the user types multi-line input.
-func (c Composer) LineCount() int {
-	v := c.ta.Value()
-	if v == "" {
-		return 1
+// SetMaxHeight caps the composer's auto-grown height (in visual rows,
+// soft wraps included). App calls this on resize so that on a very short
+// terminal the composer doesn't crowd out the transcript.
+func (c *Composer) SetMaxHeight(h int) {
+	if h < 1 {
+		h = 1
 	}
-	return strings.Count(v, "\n") + 1
+	c.ta.MaxHeight = h
 }
+
+// Height returns the composer's current visual row count (auto-computed
+// from content + width, capped by the configured max).
+func (c Composer) Height() int { return c.ta.Height() }
 
 // View renders the composer.
 func (c Composer) View() string { return c.ta.View() }

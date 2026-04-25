@@ -47,7 +47,8 @@ Putting orchestration in code means jflow can:
 - decide *when* to compact and *what* to carry forward (configurable per tool, e.g. `compact_at = 0.15`)
 - run each phase in its own `claude -p` subprocess with a focused prompt
 - share a **flat todo list** between the worker (via a bundled MCP server) and the user (via a focusable right pane) — no more guessing what the agent thinks it's doing
-- spawn cheap Sonnet meta-calls for orchestration decisions ("is the worker stuck?", "grade this output") without polluting the worker's context
+
+A cheap-Sonnet meta-loop for orchestration decisions ("is the worker stuck?", "grade this output") is designed but tracked as post-MVP — see [`docs/09-meta-model.md`](docs/09-meta-model.md).
 
 Status: Phase 1 is wired end-to-end — a three-pane TUI shell (workspaces stub / chat / session info), streaming transcript with per-response timing, async cancellable `claude -p` driver, `?` help overlay, and worktree/branch label on the composer rule. Phase 2 turns the right pane into a real todo list and the left pane into a workspace switcher. Track progress in [`ROADMAP.md`](ROADMAP.md).
 
@@ -63,32 +64,41 @@ Flags: `--dry-run` (preview) | `--no-settings` (skip settings merge) | `--no-rtk
 
 > The Go binary install (`go install ./cmd/jflow/`) is wired into Phase 5 of the roadmap. Until then, run the prototype directly: `cd ~/.jflow && go run ./cmd/jflow/`.
 
-## Skills (v1, still shipped)
+## Skills
 
-The skill bundle is the current way to use jflow inside Claude Code. The CLI rewrite ports the **`jflow` suite** (`autopilot`, `next`, `ship`, `polish`, `qa`, `release`, `jflow`, `setup`, `issue`) into deterministic Go tool programs. The standalone skills below stay as Claude Code skills — they don't need a harness.
+The harness is the product. The **jflow-suite skills** (`autopilot`, `next`, `ship`, `polish`, `qa`, `release`, `jflow`, `setup`, `issue`) and `upgrade-jflow` are **transitional**: each gets ported to a CLI tool program and deleted from the skill bundle. They don't need a harness around them right now because they *are* the harness's use cases. Once `jflow run <tool>` and `jflow upgrade` exist, these skills go away.
+
+The **standalone skills** (`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`) stay — they're standalone utilities you invoke directly from Claude Code, not orchestration loops.
 
 Invoked via `/skill-name`. Orchestrate agents, manage branches, ship code.
 
+### Transitional (skill goes away when its CLI port lands)
+
 | Skill | What it does | Status |
 |-------|-------------|-------|
-| `/jflow` | End-to-end app builder. Interview, scaffold, implement, review, ship | porting → CLI |
-| `/autopilot` | Full dev loop, iterates ROADMAP items via `/next` → `/ship` | porting → CLI |
-| `/next` | Pick up next ROADMAP item, work in a worktree | porting → CLI |
-| `/ship` | Branch, commit, PR, CI, merge, cleanup | porting → CLI |
-| `/polish` | Quality pipeline: simplify → harden → test → ship | porting → CLI |
-| `/qa` | Walk through testing every feature, or `auto` for Playwright-driven testing | porting → CLI |
-| `/release` | Cut a release — triggers the project's release mechanism and monitors to completion | porting → CLI |
-| `/setup` | Scaffold new project: repo, CI/CD, docs, roadmap, issues | porting → CLI |
-| `/issue` | Turn a rough idea into GitHub issues, auto-scaling to multi-issue breakdown | porting → CLI |
-| `/test` | Dispatch review agents against uncommitted changes | stays as skill |
-| `/simplify` | Parallel agents fix DRY violations, dead code, complexity | stays as skill |
-| `/harden` | Security audit + input validation + error boundaries | stays as skill |
-| `/docs` | Sync README, ROADMAP, CHANGELOG, docs/ with codebase state | stays as skill |
-| `/sitrep` | Branch health, stale worktrees, uncommitted work, recent activity | stays as skill |
-| `/checkup` | Git hygiene: prune remotes, remove stale branches/worktrees, gc | stays as skill |
-| `/design` | Design system creation or audit | stays as skill |
-| `/scrape-design` | Playwright-based website design extraction | stays as skill |
-| `/upgrade-jflow` | Pull latest jflow, re-run installer | stays as skill |
+| `/autopilot` | Full dev loop, iterates ROADMAP items via `/next` → `/ship` | porting → CLI (MVP) |
+| `/next` | Pick up next ROADMAP item, work in a worktree | porting → CLI (MVP) |
+| `/ship` | Branch, commit, PR, CI, merge, cleanup | porting → CLI (MVP) |
+| `/jflow` | End-to-end app builder. Interview, scaffold, implement, review, ship | port deferred (post-MVP) |
+| `/polish` | Quality pipeline: simplify → harden → test → ship | port deferred (post-MVP) |
+| `/qa` | Walk through testing every feature, or `auto` for Playwright-driven testing | port deferred (post-MVP) |
+| `/release` | Cut a release — triggers the project's release mechanism and monitors to completion | port deferred (post-MVP) |
+| `/setup` | Scaffold new project: repo, CI/CD, docs, roadmap, issues | port deferred (post-MVP) |
+| `/issue` | Turn a rough idea into GitHub issues, auto-scaling to multi-issue breakdown | port deferred (post-MVP) |
+| `/upgrade-jflow` | Pull latest jflow, re-run installer | replaced by `jflow upgrade` (#60) |
+
+### Standalone (long-term skills, no CLI port planned)
+
+| Skill | What it does |
+|-------|-------------|
+| `/test` | Dispatch review agents against uncommitted changes |
+| `/simplify` | Parallel agents fix DRY violations, dead code, complexity |
+| `/harden` | Security audit + input validation + error boundaries |
+| `/docs` | Sync README, ROADMAP, CHANGELOG, docs/ with codebase state |
+| `/sitrep` | Branch health, stale worktrees, uncommitted work, recent activity |
+| `/checkup` | Git hygiene: prune remotes, remove stale branches/worktrees, gc |
+| `/design` | Design system creation or audit |
+| `/scrape-design` | Playwright-based website design extraction |
 
 Flags are passed as arguments: `/autopilot issues interactive`, `/polish no-ship skip-harden`, `/harden audit logging`.
 
@@ -223,7 +233,7 @@ Coming (CLI harness):
 │   ├── session/                per-session state (transcript, todos, usage)
 │   ├── tool/                   Tool interface + autopilot/next/ship/...
 │   ├── mcp/todo/               bundled MCP server: todo_* tools
-│   └── meta/                   cheap-Sonnet meta-loop for orchestration decisions
+│   └── meta/                   cheap-Sonnet meta-loop (post-MVP)
 └── ~/.jflow/state/             workspaces.json + sessions/<uuid>.json + logs/
 ```
 

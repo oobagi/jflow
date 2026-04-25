@@ -14,7 +14,7 @@ A three-pane TUI harness that drives `claude -p` as a subprocess:
 - **Center:** chat — streaming transcript, composer, status bar
 - **Right:** flat todo list with an active indicator. The model edits it via a bundled MCP server; the user edits it directly. Hitting `⏎` on a todo sets it active and the chat header shows `▸ working on: <todo>`.
 
-The point of the harness: own context budget, compaction, and roadmap looping so the worker session stays focused. Old `jflow`-suite skills (`autopilot`, `next`, `ship`, `polish`, `qa`, `release`, `jflow`, `setup`, `issue`) get ported to deterministic Go tool programs that orchestrate `claude -p` invocations. Other skills (`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`) stay as Claude Code skills — they don't need a harness.
+The point of the harness: own context budget, compaction, and roadmap looping so the worker session stays focused. The old jflow-suite skills (`autopilot`, `next`, `ship`, `polish`, `qa`, `release`, `jflow`, `setup`, `issue`) are transitional — each gets ported to a Go tool program and then **deleted from the skill bundle**. The harness is the product; the skills aren't a long-term offering. Standalone utilities (`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`) stay as Claude Code skills — they don't need a harness.
 
 ---
 
@@ -43,9 +43,7 @@ Working today:
 - [x] Wired keybinds: `⏎` send · `⇧⏎`/`⌃J` newline · `⌃C` interrupt (no-op when idle, never quits) · `⌃K` `/compact` · `esc` quit (or interrupt mid-turn) · `?` help
 
 Still missing in Phase 1:
-- [ ] **`⌃L` redraw / clear** (#28)
 - [ ] **Up-arrow on empty composer = previous-message recall** (#29)
-- [ ] **Banner / header with model + cwd + session uuid** (#30) — partially addressed by the right-pane session info and composer-rule worktree/branch labels; an in-chat banner is still TBD
 - [ ] **Tool result rendering** (#31) — render `tool_result` blocks paired with their `tool_use`
 
 ## Phase 2 — workspaces + sessions + three-pane shell + todo pane
@@ -66,38 +64,33 @@ Still missing in Phase 1:
 - [ ] `cmd/run.go` — `jflow run autopilot` headless mode (#39)
 - [ ] `internal/tool/autopilot/` — port of `skills/autopilot/SKILL.md` (#40)
 - [ ] Per-tool config in `~/.jflow/config.toml` (`compact_at`, `max_turns`, `model`, `allowed_tools`)
-- [ ] **Meta-model loop** — cheap Sonnet calls for "is the worker stuck?" / "grade this output" decisions (see [`docs/09-meta-model.md`](docs/09-meta-model.md))
 
 ## Phase 4 — port the rest of the jflow suite
 
-In rough order of value:
+MVP (needed to dogfood the harness):
 - [ ] `next` (#41) — pick + work one item
 - [ ] `ship` (#42) — branch, commit, PR, merge, cleanup
-- [ ] `polish` (#43) — pipeline (composes existing Claude Code skills for simplify/harden/test phases)
-- [ ] `qa` (#44) — feature testing
-- [ ] `release` (#45) — preview/production releases
-- [ ] `jflow` (#46) — onboarding interview
-- [ ] `setup` (#47) — project scaffolding
-- [ ] `issue` (#48) — GitHub issue authoring
+- [ ] As each port lands, delete the corresponding `skills/<name>/`
 
-`simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design` stay as Claude Code skills — they're standalone utilities and don't need a harness around them.
+Post-MVP — tracked under #43 (single tracker):
+- [ ] `polish`, `qa`, `release`, `jflow`, `setup`, `issue`
 
 ## Phase 5 — install / release
 
 - [ ] `install.sh` builds and installs the Go binary (#58)
 - [ ] `goreleaser.yml` + GitHub release workflow (#59)
-- [ ] `jflow upgrade` subcommand (#60)
-- [ ] Embed VERSION via `-ldflags` (#61)
+- [ ] `jflow upgrade` subcommand — CLI-only, deletes `skills/upgrade-jflow/` (#60)
+- [ ] Embed VERSION via `-ldflags` for `jflow --version` (#61)
 
 ---
 
-## Open verification questions (#68)
+## Open verification questions
 
-Things designed around but not yet *observed* end-to-end. A `scripts/probe-stream.sh` capturing each scenario into `docs/probes/<name>.jsonl` is the way to retire these.
+Theoretical until the relevant feature lands. Verify each as it comes up rather than upfront — capture into `docs/probes/<name>.jsonl` and update [`docs/02-stream-json-events.md`](docs/02-stream-json-events.md). Tracked inline in [`docs/08-open-questions.md`](docs/08-open-questions.md).
 
 - [ ] `thinking_delta` field name (`thinking` vs `text`)
 - [ ] `tool_use` `content_block_start` shape
-- [ ] `tool_result` event shape
+- [ ] `tool_result` event shape (covered by #31)
 - [ ] `/compact` semantics in stream-json output
 - [ ] Full enum of `result.terminal_reason` and `result.subtype`
 - [ ] `--max-turns` exit-code + matching `result` event shape
@@ -107,12 +100,16 @@ Things designed around but not yet *observed* end-to-end. A `scripts/probe-strea
 
 ## Out of scope
 
-Closed during the spring-2026 cleanup; reopen if scope grows:
+Closed during the 2026 cleanups; reopen if scope grows:
 
 - Markdown export of sessions, `/commands` palette, claude slash-command pass-through
-- Skill shims (the Claude Code skills stay as primary entry points for the non-jflow-suite commands)
-- Phase 4 ports of `simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design`
+- Skill shims (the jflow-suite skills get deleted as their CLI ports land — no shell-out wrappers)
+- Ports of `simplify`, `harden`, `test`, `docs`, `sitrep`, `checkup`, `design`, `scrape-design` — these stay as Claude Code skills
 - All former Phase 7 items: stream-json mid-flight injection, hook-events rendering, transcript search, fork-session, agent-team integration, web companion
+- `⌃L` clear-screen redraw (#28) — terminal-emulator muscle memory; the transcript viewport already scrolls and there's no shell scrollback to clear
+- Dedicated session-header banner widget (#30) — model/cwd/session/branch already surface in the right pane and composer rule; active todo lives on the status bar instead
+- Standalone verification epic (#68) — verify each open question as the feature lands instead of upfront
+- Meta-model loop (#71) — designed in `docs/09-meta-model.md` but unscheduled; reopen once autopilot is dogfoodable and meta-loop value can be measured
 
 ---
 
